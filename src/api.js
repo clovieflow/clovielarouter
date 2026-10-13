@@ -37,7 +37,10 @@ export const api = {
   syncUser: () => request('/api/auth/sync', { method: 'POST' }),
 
   channels: () => request('/api/channels'),
+  payMethods: () => request('/api/pay-methods'),
   checkout: (channel, phone) => request('/api/checkout', { method: 'POST', body: { channel, phone } }),
+  checkoutCrypto: (coin) => request('/api/checkout/crypto', { method: 'POST', body: { coin } }),
+  cryptoOrder: (ref) => request(`/api/crypto/${encodeURIComponent(ref)}`),
   payments: () => request('/api/payments'),
   payment: (ref) => request(`/api/payments/${encodeURIComponent(ref)}`),
 
@@ -68,6 +71,8 @@ export const api = {
     testModel: (id, prompt) => request(`/api/admin/models/${id}/test`, { method: 'POST', body: { prompt } }),
     testAllModels: () => request('/api/admin/models/test-all', { method: 'POST' }),
     suggestAlias: () => request('/api/admin/alias/suggest'),
+    cryptoSettings: () => request('/api/admin/settings/crypto'),
+    saveCryptoSettings: (body) => request('/api/admin/settings/crypto', { method: 'PUT', body }),
     renameAlias: (id, alias) => request(`/api/admin/models/${id}`, { method: 'PATCH', body: { model_id: alias } }),
   },
 };

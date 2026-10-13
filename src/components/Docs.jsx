@@ -685,7 +685,6 @@ except APIStatusError as e:
             </p>
           </div>
           <div className="row gap-8">
-            <button className="btn btn-sm" onClick={() => navigate('/status')}>lihat status layanan</button>
             <button className="btn btn-primary btn-sm" onClick={() => navigate(user ? '/dashboard/keys' : '/checkout')}>
               {user ? 'ambil API key →' : 'beli paket →'}
             </button>

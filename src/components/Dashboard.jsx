@@ -3,80 +3,148 @@ import { api, rupiah, shortDate, relative } from '../api';
 import { navigate } from '../hooks';
 import { t } from '../lang';
 import { Avatar } from './Auth';
+import { LogoMark } from './Logo';
+
+/* ikon SVG stroke 16px — SATU gaya untuk seluruh sidebar */
+const Icon = ({ d, d2, box = 24 }) => (
+  <svg width="16" height="16" viewBox={`0 0 ${box} ${box}`} fill="none"
+       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+       style={{ flex: '0 0 auto', opacity: .85 }}>
+    <path d={d} />
+    {d2 && <path d={d2} />}
+  </svg>
+);
 
 const NAV = [
-  { group: 'nav.account', items: [
-    { path: '/dashboard', label: 'nav.overview', icon: '▤' },
-    { path: '/dashboard/models', label: 'nav.model', icon: '◆' },
-    { path: '/dashboard/keys', label: 'nav.keys', icon: '🔑' },
-    { path: '/dashboard/logs', label: 'nav.log', icon: '≡' },
-    { path: '/dashboard/usage', label: 'nav.usage', icon: '▦' },
-    { path: '/dashboard/billing', label: 'nav.billing', icon: '🧾' },
+  { group: 'nav.workspace', items: [
+    { path: '/dashboard', label: 'nav.overview', icon: <Icon d="M3 12h7M3 6h18M3 18h13M14 12h7" /> },
+    { path: '/dashboard/models', label: 'nav.model', icon: <Icon d="M6 3v12a3 3 0 0 0 3 3h6M18 9V6a3 3 0 0 0-3-3H9" d2="m14 15 3 3-3 3" /> },
+    { path: '/dashboard/logs', label: 'nav.log', icon: <Icon d="M4 6h16M4 12h16M4 18h10" /> },
+    { path: '/docs', label: 'nav.docs', icon: <Icon d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 4.5v15z" /> },
   ]},
-  { group: 'nav.help', items: [
-    { path: '/docs', label: 'nav.docs', icon: '📖' },
-    { path: '/status', label: 'nav.status', icon: '◉' },
+  { group: 'nav.account', items: [
+    { path: '/dashboard/keys', label: 'nav.keys', icon: <Icon d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L19 4m-3.5 3.5L18 10" /> },
+    { path: '/dashboard/usage', label: 'nav.usage', icon: <Icon d="M3 21h18M8 17V9M13 17V5M18 17v-6" /> },
+    { path: '/dashboard/billing', label: 'nav.billing', icon: <Icon d="M6 2h12a2 2 0 0 1 2 2v16l-4-2-2 2-2-2-2 2-2-2-4 2V4a2 2 0 0 1 2-2z" d2="M9 8h6M9 12h4" /> },
   ]},
 ];
 
 export function DashboardShell({ user, onLogout, children, active }) {
-  return (
-    <div className="dash">
-      <aside className="side">
-        <a className="brand mb-16" href="/" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
-          <span className="brand-mark">C</span> cloviela
-        </a>
-        {NAV.map(({ group, items }) => (
-          <div key={group}>
-            <div className="side-label">{t(group)}</div>
-            {items.map((it) => (
-              <a
-                key={it.path}
-                className={`side-item ${active === it.path ? 'active' : ''}`}
-                href={it.path}
-                onClick={(e) => { e.preventDefault(); navigate(it.path); }}
-              >
-                <span style={{ width: 16, opacity: .7 }}>{it.icon}</span>
-                {it.label}
-              </a>
-            ))}
-          </div>
-        ))}
-        {user?.admin && (
-          <>
-            <div className="side-label">Admin</div>
-            <a className="side-item" href="/admin"
-               onClick={(e) => { e.preventDefault(); navigate('/admin'); }}>
-              <span style={{ width: 16, opacity: .7 }}>⚙</span> Admin Panel
+  const [drawer, setDrawer] = useState(false);
+
+  // tutup drawer saat pindah halaman
+  useEffect(() => { setDrawer(false); }, [active]);
+
+  const sub = user?.subscription;
+  const daysLeft = sub?.days_left ?? 0;
+
+  const SideContent = (
+    <>
+      <a className="brand mb-16" href="/" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
+        <LogoMark size={26} /> cloviela
+      </a>
+      {NAV.map(({ group, items }) => (
+        <div key={group}>
+          <div className="side-label">{t(group)}</div>
+          {items.map((it) => (
+            <a
+              key={it.path}
+              className={`side-item ${active === it.path ? 'active' : ''}`}
+              href={it.path}
+              onClick={(e) => { e.preventDefault(); navigate(it.path); setDrawer(false); }}
+            >
+              {it.icon}
+              {t(it.label) || it.label}
             </a>
+          ))}
+        </div>
+      ))}
+
+      {user?.admin && (
+        <div>
+          <div className="side-label">admin</div>
+          <a className={`side-item ${active === '/admin' ? 'active' : ''}`} href="/admin"
+             onClick={(e) => { e.preventDefault(); navigate('/admin'); setDrawer(false); }}>
+            <Icon d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3z" />
+            {t('nav.admin')}
+            <span className="pill pill-green" style={{ marginLeft: 'auto', padding: '2px 7px', fontSize: 9 }}>ADMIN</span>
+          </a>
+          <a className={`side-item ${active === '/status' ? 'active' : ''}`} href="/status"
+             onClick={(e) => { e.preventDefault(); navigate('/status'); setDrawer(false); }}>
+            <Icon d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            {t('nav.status')}
+          </a>
+        </div>
+      )}
+
+      <div className="grow" />
+
+      {/* kartu langganan ala mockup */}
+      <div className="sub-card">
+        <div className="row between">
+          <span className="tiny-mono">{t('nav.billing')}</span>
+          <span className={`sub-dot ${sub ? (daysLeft <= 1 ? 'warn' : 'ok') : 'off'}`} />
+        </div>
+        {sub ? (
+          <>
+            <strong className="mt-4" style={{ fontSize: 13 }}>{t('plan.unlimited')}</strong>
+            <div className="tiny text-dim mt-4">
+              {sub.status === 'active'
+                ? `${daysLeft} ${t('ov.hari.lagi') || 'hari lagi'} · ${shortDate(sub.expires_at)}`
+                : sub.status}
+            </div>
+          </>
+        ) : (
+          <>
+            <strong className="mt-4" style={{ fontSize: 13 }}>{t('plan.unlimited')}</strong>
+            <div className="tiny text-dim mt-4">belum aktif</div>
+            <button className="btn btn-primary btn-sm btn-block mt-8"
+                    onClick={() => navigate('/checkout')}>{t('beli')}</button>
           </>
         )}
-        <div className="grow" />
-        <div className="row gap-12 card card-tight" style={{ padding: 12 }}>
-          <Avatar user={user} size={30} />
-          <div className="grow" style={{ minWidth: 0 }}>
-            <div className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.name || user?.email}
-            </div>
-            <div className="tiny text-dim">{user?.email}</div>
+      </div>
+
+      <div className="row gap-12 card card-tight mt-8" style={{ padding: 12 }}>
+        <Avatar user={user} size={30} />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <div className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {user?.name || user?.email}
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={onLogout} title="Keluar">⎋</button>
+          <div className="tiny text-dim">{user?.email}</div>
         </div>
-      </aside>
-      <main className="main">
-        {/* profil ringkas — tampil hanya di mobile (bottom nav menggantikan sidebar) */}
-        <div className="mobile-user">
-          <Avatar user={user} size={30} />
-          <div className="grow" style={{ minWidth: 0 }}>
-            <div className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.name || user?.email}
-            </div>
-            <div className="tiny text-dim">{user?.email}</div>
-          </div>
-          <button className="btn btn-ghost btn-sm" onClick={onLogout} title="Keluar">⎋</button>
-        </div>
-        {children}
-      </main>
+        <button className="btn btn-ghost btn-sm" onClick={onLogout} title={t('nav.logout')}>⎋</button>
+      </div>
+      <a className="side-item text-muted mt-8" href="/" style={{ fontSize: 13 }}
+         onClick={(e) => { e.preventDefault(); navigate('/'); }}>
+        {t('nav.back')}
+      </a>
+    </>
+  );
+
+  return (
+    <div className="dash">
+      {/* topbar mobile: hamburger kiri + brand */}
+      <div className="dash-top">
+        <button className="nav-burger" aria-label="Menu" onClick={() => setDrawer(!drawer)}>
+          <span className={`burger-lines ${drawer ? 'x' : ''}`} />
+        </button>
+        <a className="brand" href="/" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
+          <LogoMark size={24} /> cloviela
+        </a>
+        <span className="grow" />
+        <button className="btn btn-ghost btn-sm" onClick={onLogout} title={t('nav.logout')}>
+          <Avatar user={user} size={24} />
+        </button>
+      </div>
+
+      {/* sidebar desktop */}
+      <aside className="side">{SideContent}</aside>
+
+      {/* drawer mobile */}
+      {drawer && <div className="drawer-back" onClick={() => setDrawer(false)} />}
+      <aside className={`side drawer-side ${drawer ? 'open' : ''}`}>{SideContent}</aside>
+
+      <main className="main">{children}</main>
     </div>
   );
 }

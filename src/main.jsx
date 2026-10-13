@@ -78,11 +78,20 @@ function App() {
     );
   }
 
+  // status layanan: khusus admin — user biasa diarahkan balik ke beranda
   if (clean === '/status') {
+    if (user && user.admin) {
+      return (
+        <>
+          <Nav user={user} onLogout={logout} config={config} />
+          <StatusPage config={config} models={models} />
+        </>
+      );
+    }
     return (
       <>
         <Nav user={user} onLogout={logout} config={config} />
-        <StatusPage config={config} models={models} />
+        <Landing user={user} config={config} models={models} />
       </>
     );
   }

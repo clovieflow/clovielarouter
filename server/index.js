@@ -8,6 +8,8 @@ import { dirname, join } from 'node:path';
 import { auth, iso, Timestamp, db, C } from './firebase.js';
 import * as store from './store.js';
 import * as paymenku from './paymenku.js';
+import * as crypto from './crypto.js';
+import QRCode from 'qrcode';
 import { notifyAdmin, paymentMessage, signupMessage, revokeMessage } from './telegram.js';
 import { rateLimit, limitsInfo, currentLoad } from './limiter.js';
 
@@ -82,6 +84,9 @@ const requireUser = (req, res, next) =>
   req.user ? next() : fail(res, 401, 'Login dulu ya.', 'unauthorized');
 const requireAdmin = (req, res, next) =>
   store.isAdmin(req.user) ? next() : fail(res, 403, 'Khusus admin.', 'forbidden');
+
+/** Dipakai semua endpoint /api/admin/* — auth + harus admin. */
+const adminChain = [attachUser, requireAdmin];
 
 /* ─────────────────────────── health & config ─────────────────────────── */
 
@@ -169,6 +174,17 @@ app.get('/api/models', asyncRoute(async (_req, res) => {
  * Hanya QRIS yang ditawarkan. Kalau nanti mau membuka metode lain,
  * cukup ubah PAYMENT_METHODS di .env (mis. "qris,bca_va") atau daftar di bawah.
  */
+/** Settings crypto (alamat wallet, koin aktif) — cache 30 detik. */
+let cryptoCache = { at: 0, data: null };
+async function cryptoSettings() {
+  if (cryptoCache.data && Date.now() - cryptoCache.at < 30_000) return cryptoCache.data;
+  const raw = await store.getSettings('crypto').catch(() => null);
+  const s = crypto.normalizeSettings(raw || {});
+  cryptoCache = { at: Date.now(), data: s };
+  return s;
+}
+const clearCryptoCache = () => { cryptoCache = { at: 0, data: null }; };
+
 const PAYMENT_METHODS = (process.env.PAYMENT_METHODS || 'qris')
   .split(',')
   .map((s) => s.trim())
@@ -191,6 +207,243 @@ app.get('/api/channels', asyncRoute(async (_req, res) => {
       })),
     });
   }
+}));
+
+/* ─────────────────────────── crypto (Solana) ─────────────────────────── */
+
+/**
+ * Metode pembayaran yang tersedia — dipakai halaman checkout untuk
+ * menampilkan pilihan QRIS / USDC / USDT / SOL.
+ */
+app.get('/api/pay-methods', asyncRoute(async (_req, res) => {
+  const cs = await cryptoSettings();
+  res.json({
+    qris: {
+      enabled: paymenku.paymenkuEnabled() && PAYMENT_METHODS.includes('qris'),
+      label: 'QRIS',
+      note: 'GoPay, OVO, DANA, ShopeePay, m-banking',
+    },
+    crypto: {
+      enabled: crypto.isReady(cs),
+      label: 'Crypto (Solana)',
+      note: 'USDC · USDT · SOL',
+      coins: crypto.isReady(cs) ? crypto.publicCoins(cs) : [],
+    },
+  });
+}));
+
+/**
+ * Buat order crypto. Body: { coin: 'usdc'|'usdt'|'sol' }
+ * Mengembalikan alamat + jumlah + QR (data URL) + URI wallet.
+ */
+app.post(
+  '/api/checkout/crypto',
+  attachUser,
+  requireUser,
+  asyncRoute(async (req, res) => {
+    const cs = await cryptoSettings();
+    if (!crypto.isReady(cs)) {
+      return fail(res, 503, 'Pembayaran crypto belum dikonfigurasi admin.', 'crypto_disabled');
+    }
+
+    const coin = String(req.body?.coin || '').toLowerCase();
+    if (!crypto.COINS[coin] || !cs.coins.includes(coin)) {
+      return fail(res, 400, 'Koin tidak didukung.', 'invalid_coin');
+    }
+
+    // pakai ulang order pending yang masih hidup (hindari spam QR)
+    const existing = (await store.listCryptoOrders(req.user.uid))
+      .find((o) => o.status === 'pending' && o.coin === coin &&
+                   Date.now() - new Date(o.created_at).getTime() < 60 * 60 * 1000);
+    if (existing) {
+      return res.json({ order: publicCryptoOrder(existing), reused: true });
+    }
+
+    let amount;
+    try {
+      amount = await crypto.amountFor(coin, PRICE_IDR, cs);
+    } catch (e) {
+      return fail(res, 502, `Gagal ambil kurs: ${e.message}`, 'rate_error');
+    }
+
+    const reference = crypto.newReference();
+    const uri = crypto.payUri({
+      address: cs.address,
+      amount: amount.amount,
+      coin,
+      reference,
+      label: 'Cloviela',
+      message: `Cloviela Unlimited ${PLAN_DAYS} hari`,
+    });
+
+    const sub = await store.createSubscription(req.user.uid, {
+      plan: 'unlimited',
+      priceIdr: PRICE_IDR,
+      days: PLAN_DAYS,
+      status: 'pending',
+    });
+
+    const order = await store.createCryptoOrder({
+      reference,
+      user_id: req.user.uid,
+      subscription_id: sub.id,
+      coin,
+      symbol: amount.symbol,
+      amount: amount.amount,
+      amount_idr: PRICE_IDR,
+      rate_idr: amount.rate_idr,
+      address: cs.address,
+      uri,
+      status: 'pending',
+      signature: null,
+    });
+
+    notifyAdmin(
+      paymentMessage({
+        email: req.user.email,
+        name: req.user.name,
+        amount: PRICE_IDR,
+        channel: `crypto:${coin}`,
+        trxId: reference.slice(0, 16),
+        status: 'pending',
+      })
+    ).catch(() => {});
+
+    res.json({ order: publicCryptoOrder(order) });
+  })
+);
+
+const publicCryptoOrder = (o) => ({
+  reference: o.reference,
+  coin: o.coin,
+  symbol: o.symbol,
+  amount: o.amount,
+  amount_idr: o.amount_idr,
+  address: o.address,
+  uri: o.uri,
+  status: o.status,
+  signature: o.signature || null,
+  expires_at: new Date(new Date(o.created_at).getTime() + 60 * 60 * 1000).toISOString(),
+  created_at: o.created_at,
+});
+
+/** Polling status order crypto — cek on-chain kalau masih pending. */
+app.get(
+  '/api/crypto/:ref',
+  attachUser,
+  requireUser,
+  asyncRoute(async (req, res) => {
+    let order = await store.cryptoOrderByRef(req.params.ref);
+    if (!order || order.user_id !== req.user.uid) {
+      return fail(res, 404, 'Order tidak ditemukan.', 'not_found');
+    }
+
+    if (order.status === 'pending') {
+      order = await checkCryptoOrder(order);
+    }
+
+    res.json({
+      order: publicCryptoOrder(order),
+      subscription: (await store.userPayload(req.user)).subscription,
+    });
+  })
+);
+
+/**
+ * Cek satu order ke blockchain; kalau lunas → aktifkan langganan + terbitkan key.
+ * Idempoten: order yang sudah paid tidak diproses ulang.
+ */
+async function checkCryptoOrder(order) {
+  let verdict;
+  try {
+    verdict = await crypto.verifyPayment(order);
+  } catch (e) {
+    console.warn('[crypto] verify gagal:', e.message);
+    return order;
+  }
+  if (!verdict.paid) {
+    // order kedaluwarsa setelah 1 jam
+    if (Date.now() - new Date(order.created_at).getTime() > 60 * 60 * 1000) {
+      await store.updateCryptoOrder(order.reference, { status: 'expired' });
+      return { ...order, status: 'expired' };
+    }
+    return order;
+  }
+
+  await store.updateCryptoOrder(order.reference, {
+    status: 'paid',
+    signature: verdict.signature,
+    received: verdict.received,
+    paid_at: new Date().toISOString(),
+  });
+
+  const subSnap = await db.collection(C.subscriptions(order.user_id)).doc(order.subscription_id).get();
+  const days = subSnap.exists ? subSnap.data().days : PLAN_DAYS;
+  await store.activateSubscription(order.user_id, order.subscription_id, days);
+
+  const key = await store.activeKey(order.user_id);
+  if (!key) await store.mintApiKey(order.user_id);
+
+  const user = await store.getUser(order.user_id);
+  notifyAdmin(
+    paymentMessage({
+      email: user?.email,
+      name: user?.name,
+      amount: order.amount_idr,
+      channel: `crypto:${order.coin}`,
+      trxId: order.reference.slice(0, 16),
+      status: 'paid',
+      days,
+    })
+  ).catch(() => {});
+
+  console.log(`[crypto] lunas ${order.reference} · ${order.amount} ${order.symbol} · ${verdict.signature}`);
+  return { ...order, status: 'paid', signature: verdict.signature };
+}
+
+/** QR data URL untuk order crypto (dibuat di server, tidak perlu lib di frontend). */
+app.get(
+  '/api/crypto/:ref/qr',
+  attachUser,
+  requireUser,
+  asyncRoute(async (req, res) => {
+    const order = await store.cryptoOrderByRef(req.params.ref);
+    if (!order || order.user_id !== req.user.uid) {
+      return fail(res, 404, 'Order tidak ditemukan.', 'not_found');
+    }
+    const png = await QRCode.toBuffer(order.uri, { width: 440, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.send(png);
+  })
+);
+
+/* ── admin: settings crypto ── */
+
+app.get('/api/admin/settings/crypto', ...adminChain, asyncRoute(async (_req, res) => {
+  const s = await cryptoSettings();
+  let rateInfo = null;
+  try { rateInfo = await crypto.rates(); } catch { /* offline */ }
+  res.json({ settings: s, rates: rateInfo, coins: crypto.COIN_CODES });
+}));
+
+app.put('/api/admin/settings/crypto', ...adminChain, asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  const next = crypto.normalizeSettings({
+    enabled: body.enabled,
+    address: body.address,
+    coins: body.coins,
+    markup: body.markup,
+    fallback: body.fallback,
+  });
+
+  if (next.enabled && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(next.address)) {
+    return fail(res, 400, 'Alamat Solana tidak valid.', 'invalid_address');
+  }
+
+  await store.saveSettings('crypto', next);
+  clearCryptoCache();
+  res.json({ settings: next });
 }));
 
 const publicPayment = (p) => ({
@@ -586,8 +839,6 @@ app.post('/api/playground', attachUser, requireUser, asyncRoute(async (req, res)
 }));
 
 /* ─────────────────────────── admin ─────────────────────────── */
-
-const adminChain = [attachUser, requireAdmin];
 
 app.get('/api/admin/stats', ...adminChain, asyncRoute(async (_req, res) => {
   const [stats, providers] = await Promise.all([
@@ -1131,6 +1382,14 @@ app.use((err, _req, res, _next) => {
 setInterval(() => {
   store.expireOverdue().catch((e) => console.warn('[cron]', e.message));
 }, 15 * 60 * 1000).unref?.();
+
+/* cron crypto: cek order pending tiap 45 detik (webhook-nya blockchain) */
+setInterval(() => {
+  (async () => {
+    const pending = await store.pendingCryptoOrders(60);
+    for (const o of pending) await checkCryptoOrder(o);
+  })().catch((e) => console.warn('[cron crypto]', e.message));
+}, 45 * 1000).unref?.();
 
 app.listen(PORT, () => {
   console.log(`▸ cloviela api   http://localhost:${PORT}`);

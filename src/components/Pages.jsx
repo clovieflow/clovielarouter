@@ -4,48 +4,105 @@ import { navigate } from '../hooks';
 import { t, setLang, getLang } from '../lang';
 import { watchPayment } from '../firebase';
 import { GoogleButton, Avatar } from './Auth';
+import { LogoMark } from './Logo';
 
 /* ── Nav ─────────────────────────────────────────── */
 
 export function Nav({ user, onLogout, config, onLogin }) {
   const [lang, setLangState] = useState(getLang());
+  const [open, setOpen] = useState(false);
   const toggle = () => {
     const next = lang === 'id' ? 'en' : 'id';
     setLang(next);
     setLangState(next);
   };
+  const go = (path) => {
+    setOpen(false);
+    navigate(path);
+  };
+  // tutup drawer kalau pindah halaman via back/forward
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener('popstate', close);
+    return () => window.removeEventListener('popstate', close);
+  }, []);
+
+  const links = (
+    <>
+      <a href="/#models" onClick={(e) => { e.preventDefault(); setOpen(false); navigate('/'); setTimeout(() => document.getElementById('models')?.scrollIntoView({ behavior: 'smooth' }), 100); }}>Models</a>
+      <a href="/#pricing" onClick={(e) => { e.preventDefault(); setOpen(false); navigate('/'); setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }), 100); }}>Pricing</a>
+      <a href="/docs" onClick={(e) => { e.preventDefault(); go('/docs'); }}>Docs</a>
+      {user?.admin && (
+        <a href="/status" onClick={(e) => { e.preventDefault(); go('/status'); }}>Status</a>
+      )}
+    </>
+  );
+
   return (
     <nav className="nav">
       <div className="shell nav-inner">
+        {/* hamburger — hanya tampil di mobile */}
+        <button className="nav-burger" aria-label="Menu" onClick={() => setOpen(!open)}>
+          <span className={`burger-lines ${open ? 'x' : ''}`} />
+        </button>
+
         <a className="brand" href="/" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
-          <span className="brand-mark">C</span>
+          <LogoMark size={28} />
           cloviela
         </a>
-        <div className="nav-links grow">
-          <a href="/#models" onClick={(e) => { e.preventDefault(); navigate('/'); setTimeout(() => document.getElementById('models')?.scrollIntoView({ behavior: 'smooth' }), 100); }}>Models</a>
-          <a href="/#pricing" onClick={(e) => { e.preventDefault(); navigate('/'); setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }), 100); }}>Pricing</a>
-          <a href="/docs" onClick={(e) => { e.preventDefault(); navigate('/docs'); }}>Docs</a>
-          <a href="/status" onClick={(e) => { e.preventDefault(); navigate('/status'); }}>Status</a>
+
+        <div className="nav-links grow">{links}</div>
+
+        {/* aksi desktop */}
+        <div className="nav-actions">
+          <button className="btn btn-ghost btn-sm mono" onClick={toggle} title="Bahasa / Language">
+            {lang === 'id' ? 'EN' : 'ID'}
+          </button>
+          {user ? (
+            <>
+              <button className="btn btn-sm" onClick={() => go('/dashboard')}>Dashboard</button>
+              <button className="btn btn-ghost btn-sm" onClick={onLogout} title={t('nav.logout')}>
+                <Avatar user={user} size={26} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => go('/login')}>{t('nav.login')}</button>
+              <button className="btn btn-primary btn-sm nowrap" onClick={() => go('/checkout')}>
+                {t('mulai')} {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} {t('hero.per')} →
+              </button>
+            </>
+          )}
         </div>
-        <button className="btn btn-ghost btn-sm mono" onClick={toggle} title="Bahasa / Language">
-          {lang === 'id' ? 'EN' : 'ID'}
-        </button>
-        {user ? (
-          <div className="row gap-12">
-            <button className="btn btn-sm" onClick={() => navigate('/dashboard')}>Dashboard</button>
-            <button className="btn btn-ghost btn-sm" onClick={onLogout} title="Keluar">
-              <Avatar user={user} size={26} />
-            </button>
-          </div>
-        ) : (
-          <div className="row gap-12">
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/login')}>Masuk</button>
-            <button className="btn btn-primary btn-sm" onClick={() => navigate('/checkout')}>
-              {t('mulai')} {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} {t('hero.per')} →
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* drawer mobile dari kiri */}
+      {open && <div className="drawer-back" onClick={() => setOpen(false)} />}
+      <aside className={`drawer ${open ? 'open' : ''}`}>
+        <div className="drawer-links">{links}</div>
+
+        <div className="row gap-8 wrap drawer-actions">
+          <button className="btn btn-sm mono" onClick={toggle}>
+            {lang === 'id' ? 'EN' : 'ID'}
+          </button>
+          {user ? (
+            <>
+              <button className="btn btn-sm" onClick={() => go('/dashboard')}>Dashboard</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setOpen(false); onLogout?.(); }}>
+                {t('nav.logout')}
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-sm" onClick={() => go('/login')}>{t('nav.login')}</button>
+          )}
+        </div>
+
+        {!user && (
+          <button className="btn btn-primary btn-block mt-8" onClick={() => go('/checkout')}>
+            {t('mulai')} {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} {t('hero.per')} →
+          </button>
+        )}
+      </aside>
     </nav>
   );
 }
@@ -215,7 +272,7 @@ client = OpenAI(
       <footer className="footer">
         <div className="shell row between wrap gap-16">
           <div className="row gap-8">
-            <span className="brand-mark" style={{ width: 22, height: 22, fontSize: 12 }}>C</span>
+            <LogoMark size={22} />
             <strong>cloviela</strong>
           </div>
           <span className="tiny-mono">© {new Date().getFullYear()} router.cloviela.my.id</span>
@@ -247,23 +304,46 @@ export function LoginPage({ config, onLogin, busy, error }) {
 /* ── Checkout ────────────────────────────────────── */
 
 export function CheckoutPage({ user, config, onLogin, refresh, busy, error: authError }) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState('');
   const [localError, setLocalError] = useState('');
   const [payment, setPayment] = useState(null);
+  const [order, setOrder] = useState(null);
+  const [methods, setMethods] = useState(null);
+  const [coin, setCoin] = useState('');
 
   const price = config ? rupiah(config.price_idr) : 'Rp15.000';
   const days = config?.plan_days || 7;
 
-  const start = async () => {
+  useEffect(() => {
+    api.payMethods().then((m) => {
+      setMethods(m);
+      setCoin(m?.crypto?.coins?.[0]?.code || '');
+    }).catch(() => setMethods({ qris: { enabled: true }, crypto: { enabled: false } }));
+  }, []);
+
+  const startQris = async () => {
     setLocalError('');
-    setLoading(true);
+    setLoading('qris');
     try {
       const { payment } = await api.checkout('qris');
       setPayment(payment);
     } catch (e) {
       setLocalError(e.message);
     } finally {
-      setLoading(false);
+      setLoading('');
+    }
+  };
+
+  const startCrypto = async () => {
+    setLocalError('');
+    setLoading('crypto');
+    try {
+      const { order } = await api.checkoutCrypto(coin);
+      setOrder(order);
+    } catch (e) {
+      setLocalError(e.message);
+    } finally {
+      setLoading('');
     }
   };
 
@@ -286,31 +366,84 @@ export function CheckoutPage({ user, config, onLogin, refresh, busy, error: auth
     return <PaymentPending payment={payment} refresh={refresh} config={config} user={user} />;
   }
 
+  if (order) {
+    return <CryptoPending order={order} refresh={refresh} config={config} user={user} />;
+  }
+
+  const qrisOk = methods?.qris?.enabled;
+  const cryptoOk = methods?.crypto?.enabled;
+  const coinList = methods?.crypto?.coins || [];
+
   return (
     <div className="shell" style={{ padding: '40px 24px' }}>
       <div className="grid-2" style={{ alignItems: 'start' }}>
         <div>
-          <h1 style={{ fontSize: 28 }}>Bayar dengan QRIS</h1>
+          <h1 style={{ fontSize: 28 }}>Pilih metode pembayaran</h1>
           <p className="small text-muted mt-8">
-            Scan QR pakai aplikasi apa pun — GoPay, OVO, DANA, ShopeePay, atau m-banking.
-            Pembayaran terverifikasi otomatis, key langsung terbit.
+            Semua metode terverifikasi otomatis — API key langsung terbit begitu pembayaran masuk.
           </p>
 
-          <div className="card mt-24" style={{ borderColor: 'var(--green)' }}>
-            <div className="row between">
+          {/* QRIS */}
+          <button className="card mt-24 pay-opt" style={{ width: '100%', textAlign: 'left', cursor: qrisOk ? 'pointer' : 'not-allowed' }}
+                  disabled={!qrisOk || !!loading} onClick={startQris}>
+            <div className="row between wrap gap-12">
               <div className="row gap-12">
-                <span style={{ fontSize: 22 }}>◉</span>
+                <span className="pay-ico">◉</span>
                 <div>
                   <strong style={{ fontSize: 15 }}>QRIS</strong>
-                  <div className="tiny text-dim">Semua aplikasi pembayaran · konfirmasi instan</div>
+                  <div className="tiny text-dim">GoPay · OVO · DANA · ShopeePay · m-banking</div>
                 </div>
               </div>
-              <span className="pill pill-green">otomatis</span>
+              {loading === 'qris'
+                ? <span className="spinner" />
+                : <span className="pill pill-green">{qrisOk ? 'otomatis' : 'nonaktif'}</span>}
             </div>
+          </button>
+
+          {/* Crypto */}
+          <div className="card mt-16" style={{ opacity: cryptoOk ? 1 : .5 }}>
+            <div className="row between wrap gap-12">
+              <div className="row gap-12">
+                <span className="pay-ico">◎</span>
+                <div>
+                  <strong style={{ fontSize: 15 }}>Crypto — Solana</strong>
+                  <div className="tiny text-dim">USDC · USDT · SOL · langsung ke wallet</div>
+                </div>
+              </div>
+              <span className={`pill ${cryptoOk ? 'pill-green' : 'pill-amber'}`}>
+                {cryptoOk ? 'otomatis' : 'belum aktif'}
+              </span>
+            </div>
+
+            {cryptoOk && coinList.length > 0 && (
+              <>
+                <div className="row gap-8 wrap mt-16">
+                  {coinList.map((c) => (
+                    <button key={c.code}
+                            className={`btn btn-sm ${coin === c.code ? 'btn-primary' : ''}`}
+                            disabled={!!loading}
+                            onClick={() => setCoin(c.code)}>
+                      {c.symbol}
+                    </button>
+                  ))}
+                </div>
+                <button className="btn btn-primary btn-block mt-16" onClick={startCrypto}
+                        disabled={!!loading || !coin}>
+                  {loading === 'crypto'
+                    ? <><span className="spinner" style={{ borderTopColor: '#04140c' }} /> Membuat QR…</>
+                    : `Bayar dengan ${coinList.find((c) => c.code === coin)?.symbol || 'crypto'} →`}
+                </button>
+                <p className="tiny text-dim mt-8">
+                  Kurs dikunci saat QR dibuat. Scan pakai Phantom, Solflare, atau Backpack.
+                </p>
+              </>
+            )}
           </div>
 
+          {localError && <div className="alert alert-red mt-16">{localError}</div>}
+
           <div className="alert mt-16 tiny text-muted">
-            QR berlaku terbatas. Kalau kedaluwarsa, tinggal klik beli lagi — tidak ada biaya tambahan.
+            QR & alamat berlaku terbatas. Kalau kedaluwarsa, klik lagi — tidak ada biaya tambahan.
           </div>
         </div>
 
@@ -337,16 +470,128 @@ export function CheckoutPage({ user, config, onLogin, refresh, busy, error: auth
             <span className="mono text-green" style={{ fontSize: 26 }}>{price}</span>
           </div>
 
-          {localError && <div className="alert alert-red mt-16">{localError}</div>}
-
-          <button className="btn btn-primary btn-block mt-16" onClick={start} disabled={loading}>
-            {loading ? <span className="spinner" style={{ borderTopColor: '#04140c' }} /> : null}
-            {loading ? 'Membuat QR…' : 'Tampilkan QRIS →'}
-          </button>
-          <p className="tiny text-dim mt-8 center-text">
+          <p className="tiny text-dim mt-16">
             Tidak auto-renew. Kamu dapat pengingat H-1 sebelum masa aktif habis.
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Crypto pending ──────────────────────────────── */
+
+function CryptoPending({ order, refresh, config, user }) {
+  const [status, setStatus] = useState(order.status);
+  const [copied, setCopied] = useState('');
+  const [left, setLeft] = useState(() =>
+    Math.max(0, Math.floor((new Date(order.expires_at) - Date.now()) / 1000)));
+
+  // countdown
+  useEffect(() => {
+    const t = setInterval(() => {
+      setLeft(Math.max(0, Math.floor((new Date(order.expires_at) - Date.now()) / 1000)));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [order.expires_at]);
+
+  // polling status — server yang cek ke blockchain
+  useEffect(() => {
+    if (status !== 'pending') return;
+    const t = setInterval(async () => {
+      try {
+        const { order: o } = await api.cryptoOrder(order.reference);
+        if (o.status !== 'pending') setStatus(o.status);
+      } catch { /* diamkan */ }
+    }, 7000);
+    return () => clearInterval(t);
+  }, [status, order.reference]);
+
+  useEffect(() => {
+    if (status !== 'paid') return;
+    refresh?.();
+    const t = setTimeout(() => navigate('/dashboard?paid=1'), 1200);
+    return () => clearTimeout(t);
+  }, [status, refresh]);
+
+  const copy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(''), 1500);
+  };
+
+  const mm = String(Math.floor(left / 60)).padStart(2, '0');
+  const ss = String(left % 60).padStart(2, '0');
+
+  if (status === 'paid') {
+    return (
+      <div className="shell-narrow" style={{ padding: '80px 24px' }}>
+        <div className="card center-text" style={{ maxWidth: 440, margin: '0 auto' }}>
+          <div style={{ fontSize: 40 }}>✅</div>
+          <h1 className="mt-16" style={{ fontSize: 24 }}>Pembayaran terkonfirmasi</h1>
+          <p className="small text-muted mt-8">Langganan aktif. Mengalihkan ke dashboard…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="shell-narrow" style={{ padding: '48px 24px' }}>
+      <div className="card" style={{ maxWidth: 520, margin: '0 auto' }}>
+        <div className="row between wrap gap-8">
+          <h1 style={{ fontSize: 22 }}>Bayar {order.symbol}</h1>
+          <span className="pill pill-amber">⏳ {mm}:{ss}</span>
+        </div>
+        <p className="small text-muted mt-8">
+          Scan QR pakai Phantom, Solflare, atau Backpack. Status ter-update otomatis —
+          halaman ini bisa ditinggal, key tetap terbit saat pembayaran masuk.
+        </p>
+
+        <div className="mt-24">
+          <div className="qr-box">
+            <img src={`/api/crypto/${encodeURIComponent(order.reference)}/qr`} alt={`QR ${order.symbol}`} />
+          </div>
+
+          <div className="key-reveal mt-16">
+            <div className="row between">
+              <p className="tiny-mono">Jumlah tepat</p>
+              <button className="btn btn-sm" onClick={() => copy(String(order.amount), 'amt')}>
+                {copied === 'amt' ? '✓' : 'copy'}
+              </button>
+            </div>
+            <div className="key-value mono">{order.amount} {order.symbol}</div>
+            <p className="tiny text-dim mt-8">
+              Kirim <strong>jumlah tepat</strong> — kalau kurang, pembayaran tidak terdeteksi otomatis.
+            </p>
+          </div>
+
+          <div className="mt-16">
+            <p className="tiny-mono">Alamat tujuan</p>
+            <div className="key-value row between gap-12">
+              <span style={{ fontSize: 11.5 }}>{order.address}</span>
+              <button className="btn btn-sm" onClick={() => copy(order.address, 'addr')}>
+                {copied === 'addr' ? '✓' : 'copy'}
+              </button>
+            </div>
+          </div>
+
+          <a className="btn btn-block mt-16" href={order.uri}>
+            Buka di wallet →
+          </a>
+
+          <div className="row between mt-24 small">
+            <span className="text-muted">Total</span>
+            <span className="mono text-green">{rupiah(order.amount_idr)}</span>
+          </div>
+          <div className="row between mt-8 small">
+            <span className="text-muted">Ref</span>
+            <span className="mono tiny">{order.reference.slice(0, 20)}…</span>
+          </div>
+        </div>
+
+        <button className="btn btn-ghost btn-block mt-24" onClick={() => navigate('/dashboard')}>
+          Bayar nanti, buka dashboard
+        </button>
       </div>
     </div>
   );

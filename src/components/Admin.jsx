@@ -7,6 +7,7 @@ const TABS = [
   { id: 'users', label: 'Users' },
   { id: 'payments', label: 'Pembayaran' },
   { id: 'providers', label: 'Provider & Model' },
+  { id: 'crypto', label: 'Crypto' },
 ];
 
 export function Admin({ user }) {
@@ -44,6 +45,7 @@ export function Admin({ user }) {
       {tab === 'users' && <AdminUsers />}
       {tab === 'payments' && <AdminPayments />}
       {tab === 'providers' && <AdminProviders />}
+      {tab === 'crypto' && <AdminCrypto />}
     </div>
   );
 }
@@ -230,6 +232,162 @@ function AdminPayments() {
               </tr>
             ))}
             {!rows.length && <tr><td colSpan={6} className="text-dim small" style={{ padding: 20 }}>Belum ada pembayaran.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── crypto (Solana) ─────────────────────────────── */
+
+function AdminCrypto() {
+  const [s, setS] = useState(null);
+  const [rates, setRates] = useState(null);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = () =>
+    api.admin.cryptoSettings()
+      .then((r) => { setS(r.settings); setRates(r.rates); })
+      .catch((e) => setErr(e.message || 'Gagal memuat settings.'));
+
+  useEffect(() => { load(); }, []);
+
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
+
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.admin.saveCryptoSettings({
+        enabled: s.enabled, address: s.address, coins: s.coins,
+        markup: s.markup, fallback: s.fallback,
+      });
+      setS(r.settings);
+      flash('✓ Settings crypto disimpan.');
+    } catch (e) {
+      setErr(e.message);
+    } finally { setBusy(false); }
+  };
+
+  const toggleCoin = (c) => {
+    setS((x) => ({
+      ...x,
+      coins: x.coins.includes(c) ? x.coins.filter((y) => y !== c) : [...x.coins, c],
+    }));
+  };
+
+  if (!s) {
+    return <div className="card"><p className="small text-dim">Memuat…</p>
+      {err && <div className="alert alert-red mt-16">{err}</div>}</div>;
+  }
+
+  const rate = (code) => rates?.[code];
+  const estimate = (code) => {
+    const r = rate(code) || s.fallback?.[code];
+    if (!r) return '—';
+    const decimals = code === 'sol' ? 4 : 2;
+    const amt = Math.ceil((15000 * (s.markup || 1) / r) * 10 ** decimals) / 10 ** decimals;
+    return `${amt} ${code.toUpperCase()}`;
+  };
+
+  return (
+    <div className="stack gap-16">
+      <div className="card">
+        <div className="row between wrap gap-12">
+          <div>
+            <strong>Pembayaran Crypto (Solana)</strong>
+            <p className="tiny text-muted mt-4">
+              Terima USDC, USDT, dan SOL langsung ke wallet-mu. Tanpa gateway, tanpa potongan.
+            </p>
+          </div>
+          <label className="row gap-8 small" style={{ cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!s.enabled}
+                   onChange={(e) => setS({ ...s, enabled: e.target.checked })} />
+            aktifkan
+          </label>
+        </div>
+
+        <div className="field mt-24">
+          <label className="label">Alamat wallet Solana (penerima)</label>
+          <input className="input mono" placeholder="mis. 7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj"
+                 value={s.address || ''}
+                 onChange={(e) => setS({ ...s, address: e.target.value.trim() })} />
+          <p className="tiny text-dim mt-8">
+            Satu alamat untuk semua koin. Bisa dari Phantom, Solflare, Backpack, atau exchange
+            (pastikan exchange-mu menerima USDC/USDT di jaringan <strong>Solana</strong>).
+          </p>
+        </div>
+
+        <div className="field">
+          <label className="label">Koin yang diterima</label>
+          <div className="row gap-12 wrap">
+            {['usdc', 'usdt', 'sol'].map((c) => (
+              <label key={c} className="row gap-8 small"
+                     style={{ cursor: 'pointer', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 10 }}>
+                <input type="checkbox" checked={s.coins.includes(c)} onChange={() => toggleCoin(c)} />
+                <span className="mono">{c.toUpperCase()}</span>
+                <span className="tiny text-dim">
+                  {rate(c) ? `Rp${Number(rate(c)).toLocaleString('id-ID')}` : 'kurs —'}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="label">Markup harga (jaga fluktuasi)</label>
+          <input className="input" type="number" step="0.01" min="1" max="2" style={{ maxWidth: 160 }}
+                 value={s.markup ?? 1}
+                 onChange={(e) => setS({ ...s, markup: Number(e.target.value) })} />
+          <p className="tiny text-dim mt-8">
+            1.00 = harga normal · 1.03 = 3% lebih mahal (cadangan kalau kurs turun saat pembayaran).
+          </p>
+        </div>
+
+        <div className="field">
+          <label className="label">Kurs cadangan (dipakai kalau CoinGecko tidak bisa diakses)</label>
+          <div className="row gap-12 wrap">
+            {['usdc', 'usdt', 'sol'].map((c) => (
+              <div key={c} style={{ maxWidth: 180 }}>
+                <div className="tiny-mono">{c.toUpperCase()} · IDR per 1</div>
+                <input className="input mono" type="number" min="0" step="1"
+                       value={s.fallback?.[c] ?? 0}
+                       onChange={(e) => setS({ ...s, fallback: { ...s.fallback, [c]: Number(e.target.value) } })} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {msg && <div className="alert alert-green mb-16">{msg}</div>}
+        {err && <div className="alert alert-red mb-16">{err}</div>}
+
+        <button className="btn btn-primary" onClick={save} disabled={busy}>
+          {busy ? 'Menyimpan…' : 'Simpan settings crypto'}
+        </button>
+      </div>
+
+      <div className="card">
+        <strong>Pratinjau harga</strong>
+        <p className="tiny text-muted mt-4">
+          Paket Rp15.000 — jumlah koin yang diminta pembeli (dibulatkan ke atas).
+        </p>
+        <table className="table mt-16">
+          <thead><tr><th>Koin</th><th>Kurs IDR</th><th style={{ textAlign: 'right' }}>Jumlah diminta</th></tr></thead>
+          <tbody>
+            {s.coins.map((c) => (
+              <tr key={c}>
+                <td className="mono tiny" data-label="Koin">{c.toUpperCase()}</td>
+                <td className="mono tiny" data-label="Kurs">
+                  {rate(c) ? Number(rate(c)).toLocaleString('id-ID') : '—'}
+                </td>
+                <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Jumlah">{estimate(c)}</td>
+              </tr>
+            ))}
+            {!s.coins.length && (
+              <tr><td colSpan={3} className="small text-dim" style={{ padding: 16 }}>Belum ada koin dipilih.</td></tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -625,6 +625,62 @@ export async function adminPayments(limit = 100) {
   return rows;
 }
 
+/* ────────────────────────────── settings ────────────────────────────── */
+
+/** Baca settings bernama (mis. 'crypto'). */
+export async function getSettings(name) {
+  const snap = await db.collection(C.settings).doc(name).get();
+  return snap.exists ? snap.data() : null;
+}
+
+export async function saveSettings(name, data) {
+  await db.collection(C.settings).doc(name).set({ ...data, updated_at: now() }, { merge: true });
+  return getSettings(name);
+}
+
+/* ────────────────────────────── crypto orders ────────────────────────────── */
+
+/**
+ * Order crypto disimpan di koleksi top-level `crypto_orders` supaya bisa
+ * dicari lewat `reference` (yang ada di QR) tanpa tahu uid pemiliknya.
+ */
+export async function createCryptoOrder(data) {
+  const ref = db.collection(C.cryptoOrders).doc();
+  const doc = { id: ref.id, ...data, created_at: now() };
+  await ref.set(doc);
+  return { ...doc, created_at: new Date().toISOString() };
+}
+
+export async function cryptoOrderByRef(reference) {
+  const snap = await db.collection(C.cryptoOrders).doc(reference).get();
+  return snap.exists ? { id: snap.id, ...snap.data() } : null;
+}
+
+export async function updateCryptoOrder(reference, patch) {
+  await db.collection(C.cryptoOrders).doc(reference).set(patch, { merge: true });
+}
+
+export async function listCryptoOrders(uid, limit = 50) {
+  const snap = await db
+    .collection(C.cryptoOrders)
+    .where('user_id', '==', uid)
+    .limit(200)
+    .get();
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => new Date(iso(b.created_at) || 0) - new Date(iso(a.created_at) || 0))
+    .slice(0, limit);
+}
+
+/** Order crypto yang masih menunggu (untuk cron + polling). */
+export async function pendingCryptoOrders(maxAgeMinutes = 120) {
+  const snap = await db.collection(C.cryptoOrders).where('status', '==', 'pending').limit(100).get();
+  const since = Date.now() - maxAgeMinutes * 60_000;
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((o) => new Date(iso(o.created_at) || 0).getTime() > since);
+}
+
 /* ────────────────────────────── serializer ────────────────────────────── */
 
 export async function userPayload(user) {

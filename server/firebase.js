@@ -60,6 +60,8 @@ export const C = {
   trxIndex: 'trx_index',
   refIndex: 'ref_index',
   webhooks: 'webhook_events',
+  settings: 'settings',
+  cryptoOrders: 'crypto_orders',
   subscriptions: (uid) => `users/${uid}/subscriptions`,
   payments: (uid) => `users/${uid}/payments`,
 };
