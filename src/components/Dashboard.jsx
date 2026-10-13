@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
 import { api, rupiah, shortDate, relative } from '../api';
 import { navigate } from '../hooks';
+import { t } from '../lang';
 import { Avatar } from './Auth';
 
 const NAV = [
-  { group: 'Akun', items: [
-    { path: '/dashboard', label: 'Overview', icon: '▤' },
-    { path: '/dashboard/models', label: 'Model', icon: '◆' },
-    { path: '/dashboard/keys', label: 'API Keys', icon: '🔑' },
-    { path: '/dashboard/logs', label: 'Log', icon: '≡' },
-    { path: '/dashboard/usage', label: 'Usage', icon: '▦' },
-    { path: '/dashboard/billing', label: 'Pembayaran', icon: '🧾' },
+  { group: 'nav.account', items: [
+    { path: '/dashboard', label: 'nav.overview', icon: '▤' },
+    { path: '/dashboard/models', label: 'nav.model', icon: '◆' },
+    { path: '/dashboard/keys', label: 'nav.keys', icon: '🔑' },
+    { path: '/dashboard/logs', label: 'nav.log', icon: '≡' },
+    { path: '/dashboard/usage', label: 'nav.usage', icon: '▦' },
+    { path: '/dashboard/billing', label: 'nav.billing', icon: '🧾' },
   ]},
-  { group: 'Bantuan', items: [
-    { path: '/docs', label: 'Dokumentasi', icon: '📖' },
-    { path: '/status', label: 'Status layanan', icon: '◉' },
+  { group: 'nav.help', items: [
+    { path: '/docs', label: 'nav.docs', icon: '📖' },
+    { path: '/status', label: 'nav.status', icon: '◉' },
   ]},
 ];
 
@@ -27,7 +28,7 @@ export function DashboardShell({ user, onLogout, children, active }) {
         </a>
         {NAV.map(({ group, items }) => (
           <div key={group}>
-            <div className="side-label">{group}</div>
+            <div className="side-label">{t(group)}</div>
             {items.map((it) => (
               <a
                 key={it.path}
@@ -108,7 +109,7 @@ export function Overview({ user, refresh, config }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Overview</h1>
+          <h1>{t('nav.overview')}</h1>
           <p className="small text-muted mt-4">Halo, {user?.name?.split(' ')[0] || 'developer'} 👋</p>
         </div>
         <span className={`pill ${sub ? (expiring ? 'pill-amber' : 'pill-green') : 'pill-red'}`}>
@@ -133,9 +134,9 @@ export function Overview({ user, refresh, config }) {
       )}
 
       <div className="kpi-grid mb-24">
-        <Kpi label="REQUEST HARI INI" value={usage?.totals?.today ?? '—'} />
-        <Kpi label="REQUEST TOTAL" value={usage?.totals?.total ?? '—'} />
-        <Kpi label="LATENSI RATA-RATA" value={usage?.totals?.avg_ms ? `${usage.totals.avg_ms} ms` : '—'} />
+        <Kpi label={t('usage.today')} value={usage?.totals?.today ?? '—'} />
+        <Kpi label={t('usage.total')} value={usage?.totals?.total ?? '—'} />
+        <Kpi label={t('usage.avg')} value={usage?.totals?.avg_ms ? `${usage.totals.avg_ms} ms` : '—'} />
         <Kpi label="MASA AKTIF" value={sub ? `${daysLeft} hari` : '—'}
              tone={expiring ? 'amber' : sub ? 'green' : undefined} />
       </div>

@@ -15,9 +15,17 @@ function App() {
   const auth = useAuth(config);
   const path = usePath();
   const [models, setModels] = useState([]);
+  const [_, forceRender] = useState(0);
 
   useEffect(() => {
     api.models().then((r) => setModels(r.models || [])).catch(() => {});
+  }, []);
+
+  // re-render global saat bahasa diganti toggle
+  useEffect(() => {
+    const onLang = () => forceRender((n) => n + 1);
+    window.addEventListener('clv-lang-change', onLang);
+    return () => window.removeEventListener('clv-lang-change', onLang);
   }, []);
 
   const { user, logout } = auth;

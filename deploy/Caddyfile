@@ -1,24 +1,22 @@
-# Reverse proxy untuk router.cloviela.my.id → app di :8787
-# Ganti email & domain sesuai punyamu.
-#
-# Cara pakai (Ubuntu/Debian):
-#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-#   sudo nano /etc/caddy/Caddyfile        # ganti domain & email
-#   sudo systemctl reload caddy
-#
-# Caddy otomatis mengurus sertifikat HTTPS (Let's Encrypt) — tidak perlu certbot.
+# Caddy — menggantikan nginx sepenuhnya
+# Sertifikat Let's Encrypt otomatis (keluar-masuk, renewable oleh Caddy)
 
+{
+	email clovvalencied@gmail.com
+}
+
+# ── Cloviela Router ─────────────────────────────────────────────
+# Domain: router.cloviela.my.id
+# App   : Express di 127.0.0.1:8787
 router.cloviela.my.id {
-	encode zstd gzip
-
-	# webhook Paymenku & API — teruskan apa adanya (raw body utuh)
-	@api path /api/* /v1/*
-	reverse_proxy @api 127.0.0.1:8787 {
-		# penting untuk webhook: jangan buffer / ubah body
+	# gateway AI — streaming SSE tanpa buffering
+	reverse_proxy /v1/* 127.0.0.1:8787 {
 		flush_interval -1
 	}
-
-	# sisanya: SPA (server Express sudah menyajikan dist/)
+	# webhook Paymenku — raw body harus utuh
+	reverse_proxy /api/webhook/paymenku 127.0.0.1:8787 {
+		flush_interval -1
+	}
 	reverse_proxy 127.0.0.1:8787
 
 	header {
@@ -28,11 +26,29 @@ router.cloviela.my.id {
 		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}
+}
 
-	log {
-		output file /var/log/caddy/cloviela.log {
-			roll_size 20mb
-			roll_keep 5
-		}
+# ── Eglant ──────────────────────────────────────────────────────
+# Frontend Next.js di 127.0.0.1:3000
+
+eglant.bond {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+	header {
+		-Server
+	}
+}
+
+www.eglant.bond {
+	redir https://eglant.bond{uri} permanent
+}
+
+api.eglant.bond {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+	header {
+		-Server
 	}
 }

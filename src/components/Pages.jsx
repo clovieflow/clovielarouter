@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import { api, rupiah } from '../api';
 import { navigate } from '../hooks';
+import { t, setLang, getLang } from '../lang';
 import { watchPayment } from '../firebase';
 import { GoogleButton, Avatar } from './Auth';
 
 /* ── Nav ─────────────────────────────────────────── */
 
 export function Nav({ user, onLogout, config, onLogin }) {
+  const [lang, setLangState] = useState(getLang());
+  const toggle = () => {
+    const next = lang === 'id' ? 'en' : 'id';
+    setLang(next);
+    setLangState(next);
+  };
   return (
     <nav className="nav">
       <div className="shell nav-inner">
@@ -20,6 +27,9 @@ export function Nav({ user, onLogout, config, onLogin }) {
           <a href="/docs" onClick={(e) => { e.preventDefault(); navigate('/docs'); }}>Docs</a>
           <a href="/status" onClick={(e) => { e.preventDefault(); navigate('/status'); }}>Status</a>
         </div>
+        <button className="btn btn-ghost btn-sm mono" onClick={toggle} title="Bahasa / Language">
+          {lang === 'id' ? 'EN' : 'ID'}
+        </button>
         {user ? (
           <div className="row gap-12">
             <button className="btn btn-sm" onClick={() => navigate('/dashboard')}>Dashboard</button>
@@ -31,7 +41,7 @@ export function Nav({ user, onLogout, config, onLogin }) {
           <div className="row gap-12">
             <button className="btn btn-ghost btn-sm" onClick={() => navigate('/login')}>Masuk</button>
             <button className="btn btn-primary btn-sm" onClick={() => navigate('/checkout')}>
-              Mulai {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} hari →
+              {t('mulai')} {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} {t('hero.per')} →
             </button>
           </div>
         )}
@@ -50,16 +60,15 @@ export function Landing({ user, config, models }) {
     <>
       <section className="hero shell">
         <span className="eyebrow">OpenAI-compatible · unlimited request</span>
-        <h1 className="mt-16">Satu API key.<br />Unlimited request ke model AI.</h1>
+        <h1 className="mt-16">{t('hero.title')}<br />{t('hero.title2')}</h1>
         <p className="lead">
-          Router AI kompatibel OpenAI. Ganti <span className="mono text-green">base_url</span>, kode lama
-          langsung jalan — tanpa kuota token, tanpa tagihan kejutan.
+          {t('hero.lead').split('base_url')[0]}<span className="mono text-green">base_url</span>{t('hero.lead').split('base_url')[1] || ', kode lama langsung jalan.'}
         </p>
         <div className="hero-actions">
           <button className="btn btn-primary" onClick={() => navigate('/checkout')}>
             Mulai {price} / {days} hari →
           </button>
-          <button className="btn" onClick={() => navigate('/docs')}>Baca dokumentasi</button>
+          <button className="btn" onClick={() => navigate('/docs')}>{t('nav.docs')}</button>
         </div>
 
         <div className="stat-row mt-64">
@@ -162,11 +171,11 @@ export function Landing({ user, config, models }) {
       {/* pricing */}
       <section className="section shell" id="pricing">
         <span className="eyebrow">// pricing</span>
-        <h2 className="mt-8">Satu paket. Semua model.</h2>
+        <h2 className="mt-8">{t('pricing.title')}</h2>
         <div className="grid-2 mt-32">
           <div className="card price-card">
             <div className="row between">
-              <strong>Paket Unlimited</strong>
+              <strong>{t('plan.unlimited')}</strong>
               <span className="pill pill-green">● aktif otomatis</span>
             </div>
             <div className="price-tag mt-16">{price}</div>
@@ -176,7 +185,7 @@ export function Landing({ user, config, models }) {
               <li><span className="tick">✓</span> Semua model yang tersedia</li>
               <li><span className="tick">✓</span> Endpoint kompatibel OpenAI + streaming</li>
               <li><span className="tick">✓</span> 1 API key untuk semua project</li>
-              <li><span className="tick">✓</span> Bayar QRIS — otomatis, tanpa konfirmasi manual</li>
+              <li><span className="tick">✓</span> {t('checkout.auto')} — {t('checkout.qris')}</li>
             </ul>
             <button className="btn btn-primary btn-block mt-24" onClick={() => navigate('/checkout')}>
               Beli sekarang →
@@ -222,10 +231,8 @@ export function LoginPage({ config, onLogin, busy, error }) {
   return (
     <div className="shell-narrow" style={{ padding: '80px 24px' }}>
       <div className="card" style={{ maxWidth: 420, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 26 }}>Masuk ke cloviela</h1>
-        <p className="small text-muted mt-8">
-          Cukup pakai akun Google — tidak perlu password, tidak perlu verifikasi tambahan.
-        </p>
+        <h1 style={{ fontSize: 26 }}>{t('auth.title')}</h1>
+        <p className="small text-muted mt-8">{t('auth.lead')}</p>
         <div className="mt-24">
           <GoogleButton config={config} onLogin={onLogin} block busy={busy} error={error} />
         </div>
@@ -264,13 +271,11 @@ export function CheckoutPage({ user, config, onLogin, refresh, busy, error: auth
     return (
       <div className="shell-narrow" style={{ padding: '64px 24px' }}>
         <div className="card" style={{ maxWidth: 440, margin: '0 auto' }}>
-          <h1 style={{ fontSize: 24 }}>Buat akun &amp; beli paket</h1>
-          <p className="small text-muted mt-8">
-            Login dengan Google dulu — satu langkah, langsung lanjut ke pembayaran.
-          </p>
+          <h1 style={{ fontSize: 24 }}>{t('checkout.account.title')}</h1>
+          <p className="small text-muted mt-8">{t('checkout.account.lead')}</p>
           <div className="mt-24">
             <GoogleButton config={config} onLogin={onLogin} block busy={busy} error={authError}
-                          label="Login dengan Google" />
+                          label={t('checkout.login.google')} />
           </div>
         </div>
       </div>
