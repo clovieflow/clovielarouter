@@ -494,7 +494,11 @@ app.post(
         orderItems: [{ name: `Cloviela Unlimited · ${PLAN_DAYS} hari`, quantity: 1 }],
       });
     } catch (err) {
-      return fail(res, 502, `Gagal membuat transaksi: ${err.message}`, 'paymenku_error');
+      console.error('[checkout] paymenku gagal:', err.message, err.payload || '');
+      notifyAdmin(
+        `⚠️ <b>Checkout gagal</b>\n👤 ${user.name} · <code>${user.email}</code>\n📝 ${err.message}\n🕐 ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB`
+      ).catch(() => {});
+      return fail(res, 502, `Gagal membuat transaksi (${err.message}). Coba lagi sebentar — kalau terus, lapor admin.`, 'paymenku_error');
     }
 
     const sub = await store.createSubscription(user.uid, {
