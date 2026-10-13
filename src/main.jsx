@@ -44,7 +44,7 @@ function App() {
   if (clean === '/' || clean === '') {
     return (
       <>
-        <Nav user={user} onLogout={logout} config={config} />
+        <Nav user={user} onLogout={logout} config={config} onLogin={auth.login} />
         <Landing user={user} config={config} models={models} />
       </>
     );
@@ -53,7 +53,7 @@ function App() {
   if (clean === '/login') {
     return (
       <>
-        <Nav user={user} onLogout={logout} config={config} />
+        <Nav user={user} onLogout={logout} config={config} onLogin={auth.login} />
         <LoginPage config={config} onLogin={auth.login} busy={auth.busy} error={auth.error} />
       </>
     );
@@ -62,7 +62,7 @@ function App() {
   if (clean === '/checkout') {
     return (
       <>
-        <Nav user={user} onLogout={logout} config={config} />
+        <Nav user={user} onLogout={logout} config={config} onLogin={auth.login} />
         <CheckoutPage user={user} config={config} onLogin={auth.login} refresh={auth.refresh}
                       busy={auth.busy} error={auth.error} />
       </>
@@ -72,7 +72,7 @@ function App() {
   if (clean === '/docs') {
     return (
       <>
-        <Nav user={user} onLogout={logout} config={config} />
+        <Nav user={user} onLogout={logout} config={config} onLogin={auth.login} />
         <Docs user={user} config={config} models={models} />
       </>
     );
@@ -83,14 +83,14 @@ function App() {
     if (user && user.admin) {
       return (
         <>
-          <Nav user={user} onLogout={logout} config={config} />
+          <Nav user={user} onLogout={logout} config={config} onLogin={auth.login} />
           <StatusPage config={config} models={models} />
         </>
       );
     }
     return (
       <>
-        <Nav user={user} onLogout={logout} config={config} />
+        <Nav user={user} onLogout={logout} config={config} onLogin={auth.login} />
         <Landing user={user} config={config} models={models} />
       </>
     );
@@ -110,7 +110,7 @@ function App() {
   if (clean.startsWith('/admin')) {
     return (
       <>
-        <Nav user={user} onLogout={logout} config={config} />
+        <Nav user={user} onLogout={logout} config={config} onLogin={auth.login} />
         <Admin user={user} />
       </>
     );

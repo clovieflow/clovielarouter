@@ -20,7 +20,8 @@ export function Nav({ user, onLogout, config, onLogin }) {
     setOpen(false);
     navigate(path);
   };
-  // tutup drawer kalau pindah halaman via back/forward
+  // CTA utama: sudah login → dashboard dulu; belum → checkout (login dulu di sana)
+  const ctaGo = () => go(user ? '/dashboard' : '/checkout');
   useEffect(() => {
     const close = () => setOpen(false);
     window.addEventListener('popstate', close);
@@ -39,71 +40,84 @@ export function Nav({ user, onLogout, config, onLogin }) {
   );
 
   return (
-    <nav className="nav">
-      <div className="shell nav-inner">
-        {/* hamburger — hanya tampil di mobile */}
-        <button className="nav-burger" aria-label="Menu" onClick={() => setOpen(!open)}>
-          <span className={`burger-lines ${open ? 'x' : ''}`} />
-        </button>
-
-        <a className="brand" href="/" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
-          <LogoMark size={28} />
-          cloviela
-        </a>
-
-        <div className="nav-links grow">{links}</div>
-
-        {/* aksi desktop */}
-        <div className="nav-actions">
-          <button className="btn btn-ghost btn-sm mono" onClick={toggle} title="Bahasa / Language">
-            {lang === 'id' ? 'EN' : 'ID'}
+    <>
+      {/* PENTING: drawer & backdrop HARUS di luar <nav> — backdrop-filter nav
+          membuat position:fixed di dalamnya terkurung tinggi 56px (bug: drawer
+          cuma menampilkan item pertama). */}
+      <nav className="nav">
+        <div className="shell nav-inner">
+          <button className="nav-burger" aria-label="Menu" onClick={() => setOpen(!open)}>
+            <span className={`burger-lines ${open ? 'x' : ''}`} />
           </button>
-          {user ? (
-            <>
-              <button className="btn btn-sm" onClick={() => go('/dashboard')}>Dashboard</button>
-              <button className="btn btn-ghost btn-sm" onClick={onLogout} title={t('nav.logout')}>
-                <Avatar user={user} size={26} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="btn btn-ghost btn-sm" onClick={() => go('/login')}>{t('nav.login')}</button>
-              <button className="btn btn-primary btn-sm nowrap" onClick={() => go('/checkout')}>
-                {t('mulai')} {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} {t('hero.per')} →
-              </button>
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* drawer mobile dari kiri */}
+          <a className="brand" href="/" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
+            <LogoMark size={28} />
+            cloviela
+          </a>
+
+          <div className="nav-links grow">{links}</div>
+
+          <div className="nav-actions">
+            <button className="btn btn-ghost btn-sm mono" onClick={toggle} title="Bahasa / Language">
+              {lang === 'id' ? 'EN' : 'ID'}
+            </button>
+            {user ? (
+              <>
+                <button className="btn btn-sm btn-dash" onClick={() => go('/dashboard')}>Dashboard</button>
+                <button className="btn btn-ghost btn-sm btn-avatar" onClick={onLogout} title={t('nav.logout')}>
+                  <Avatar user={user} size={26} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-ghost btn-sm btn-login" onClick={() => go('/login')}>{t('nav.login')}</button>
+                <button className="btn btn-primary btn-sm nowrap btn-cta" onClick={ctaGo}>
+                  {t('mulai')} {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} {t('hero.per')} →
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </nav>
+
       {open && <div className="drawer-back" onClick={() => setOpen(false)} />}
       <aside className={`drawer ${open ? 'open' : ''}`}>
         <div className="drawer-links">{links}</div>
 
         <div className="row gap-8 wrap drawer-actions">
-          <button className="btn btn-sm mono" onClick={toggle}>
-            {lang === 'id' ? 'EN' : 'ID'}
-          </button>
-          {user ? (
-            <>
-              <button className="btn btn-sm" onClick={() => go('/dashboard')}>Dashboard</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setOpen(false); onLogout?.(); }}>
-                {t('nav.logout')}
-              </button>
-            </>
-          ) : (
-            <button className="btn btn-sm" onClick={() => go('/login')}>{t('nav.login')}</button>
+          <button className="btn btn-sm mono" onClick={toggle}>{lang === 'id' ? 'EN' : 'ID'}</button>
+          {user && <button className="btn btn-sm" onClick={() => go('/dashboard')}>Dashboard</button>}
+          {user && (
+            <button className="btn btn-ghost btn-sm" onClick={() => { setOpen(false); onLogout?.(); }}>
+              {t('nav.logout')}
+            </button>
           )}
         </div>
 
+        {/* login langsung di drawer (mobile) — tanpa lewat halaman login */}
         {!user && (
-          <button className="btn btn-primary btn-block mt-8" onClick={() => go('/checkout')}>
+          <div className="mt-16">
+            <GoogleButton config={config} onLogin={onLogin} block label={t('checkout.login.google')} />
+          </div>
+        )}
+
+        {user ? (
+          <button className="btn btn-primary btn-block mt-8" onClick={() => go('/dashboard')}>
+            {t('nav.enter')} 
+          </button>
+        ) : (
+          <button className="btn btn-primary btn-block mt-8" onClick={ctaGo}>
             {t('mulai')} {config ? rupiah(config.price_idr) : 'Rp15.000'}/{config?.plan_days || 7} {t('hero.per')} →
           </button>
         )}
+
+        {user?.admin && (
+          <button className="btn btn-ghost btn-block mt-8" onClick={() => go('/admin')}>
+            {t('nav.admin')} →
+          </button>
+        )}
       </aside>
-    </nav>
+    </>
   );
 }
 
@@ -122,8 +136,8 @@ export function Landing({ user, config, models }) {
           {t('hero.lead').split('base_url')[0]}<span className="mono text-green">base_url</span>{t('hero.lead').split('base_url')[1] || ', kode lama langsung jalan.'}
         </p>
         <div className="hero-actions">
-          <button className="btn btn-primary" onClick={() => navigate('/checkout')}>
-            Mulai {price} / {days} hari →
+          <button className="btn btn-primary" onClick={() => navigate(user ? '/dashboard' : '/checkout')}>
+            {user ? 'Masuk dashboard →' : `Mulai ${price} / ${days} hari →`}
           </button>
           <button className="btn" onClick={() => navigate('/docs')}>{t('nav.docs')}</button>
         </div>
@@ -244,7 +258,7 @@ export function Landing({ user, config, models }) {
               <li><span className="tick">✓</span> 1 API key untuk semua project</li>
               <li><span className="tick">✓</span> {t('checkout.auto')} — {t('checkout.qris')}</li>
             </ul>
-            <button className="btn btn-primary btn-block mt-24" onClick={() => navigate('/checkout')}>
+            <button className="btn btn-primary btn-block mt-24" onClick={() => navigate(user ? '/dashboard/billing' : '/checkout')}>
               Beli sekarang →
             </button>
           </div>

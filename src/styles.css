@@ -129,6 +129,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .drawer {
   display: none; position: fixed; top: 0; left: 0; bottom: 0; z-index: 95;
+  padding-top: calc(18px + env(safe-area-inset-top));
   width: min(300px, 84vw); padding: 18px 18px calc(24px + env(safe-area-inset-bottom));
   background: var(--panel-2); border-right: 1px solid var(--border);
   overflow-y: auto; overscroll-behavior: contain;
@@ -489,7 +490,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .nav-inner { height: 56px; gap: 12px; padding-right: 16px; }
   .nav-burger { display: grid; }
   .nav-links { display: none; }
-  .nav-actions { display: none; }             /* semua aksi pindah ke drawer */
+  /* topbar kanan atas: EN + login (guest) / Dashboard (sudah login).
+     CTA besar & avatar logout tetap di drawer. */
+  .nav-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .nav-actions .btn-cta, .nav-actions .btn-avatar { display: none; }
   .drawer { display: flex; }
   .nav .brand { margin-right: auto; }         /* brand nempel ke kanan burger */
 
