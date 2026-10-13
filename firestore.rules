@@ -1,0 +1,193 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {uid} (Firebase Auth uid)
+// Fields:
+//   - uid: string (required, immutable) — sama dengan document id
+//   - email: string (required, immutable) — PII, hanya owner
+//   - name: string (required, 1..80)
+//   - photo: string|null (optional, URL)
+//   - role: string (required) — 'user' | 'admin', TIDAK boleh diubah user
+//   - created_at: timestamp (required, immutable)
+//   - last_login_at: timestamp (optional)
+//
+// Collection: users/{uid}/subscriptions
+// Document ID: auto
+// Fields:
+//   - id, user_id (immutable), plan, price_idr, days,
+//     status ('pending'|'active'|'expired'), starts_at, expires_at, created_at
+//   → ditulis HANYA oleh server (Admin SDK). Client hanya boleh baca miliknya.
+//
+// Collection: users/{uid}/payments
+// Document ID: auto
+// Fields:
+//   - id, user_id, subscription_id, amount_idr, channel, reference_id,
+//     trx_id, pay_url, qr_url, va_number, status, paid_at, raw, created_at
+//   → ditulis HANYA oleh server. Client hanya boleh baca miliknya.
+//
+// Collection: api_keys
+// Document ID: auto
+// Fields:
+//   - id, user_id, key_prefix, key_hash, status ('active'|'revoked'),
+//     last_used_at, created_at, revoked_at
+//   → berisi key_hash (rahasia) + key_prefix. HANYA server yang boleh akses.
+//     Client TIDAK boleh membaca koleksi ini sama sekali (dilindungi endpoint /api/me).
+//
+// Collection: usage_logs
+// Document ID: auto
+// Fields: key_id, user_id, request_id, model, status_code, latency_ms, tokens_in, tokens_out, created_at
+//   → ditulis server; client baca agregatnya lewat /api/usage.
+//
+// Collection: providers, models
+//   → konfigurasi publik milik admin. Hanya admin yang boleh menulis.
+//     Client membaca daftar model lewat /api/models (endpoint server).
+//
+// Collection: trx_index, ref_index, webhook_events
+//   → internal server (webhook Paymenku). Tidak ada akses client.
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- helpers ----------------
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function hasOnlyAllowedFields(allowed) {
+      return request.resource.data.keys().hasOnly(allowed);
+    }
+
+    function hasAllRequiredFields(required) {
+      return request.resource.data.keys().hasAll(required);
+    }
+
+    function validString(field, minLen, maxLen) {
+      return field is string && field.size() >= minLen && field.size() <= maxLen;
+    }
+
+    function isValidEmail(email) {
+      return email is string
+        && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function roleUnchanged() {
+      return !('role' in request.resource.data)
+        || request.resource.data.role == resource.data.role;
+    }
+
+    function immutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ---------------- validators (create + update) ----------------
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields([
+               'uid', 'email', 'name', 'photo', 'role', 'created_at', 'last_login_at'
+             ])
+        && hasAllRequiredFields(['uid', 'email', 'name', 'role', 'created_at'])
+        && validString(data.uid, 1, 128)
+        && isValidEmail(data.email)
+        && validString(data.name, 1, 80)
+        && data.role in ['user', 'admin']
+        && (!('photo' in data) || data.photo == null || isValidUrl(data.photo));
+    }
+
+    // ---------------- users ----------------
+    match /users/{userId} {
+      // PII (email) → hanya owner atau admin.
+      allow read: if isOwner(userId) || isAdmin();
+
+      // User boleh membuat dokumennya sendiri, TAPI role wajib 'user'.
+      // Admin boleh membuat untuk siapa pun (mis. bootstrap).
+      allow create: if isAuthenticated()
+        && isValidUser(request.resource.data)
+        && request.resource.data.uid == userId
+        && (
+          (isOwner(userId) && request.resource.data.role == 'user')
+          || isAdmin()
+        );
+
+      // Update: user hanya boleh mengubah profilnya (name/photo/last_login_at).
+      // uid, email, created_at immutable; role hanya admin yang boleh ubah.
+      allow update: if isAuthenticated()
+        && isValidUser(request.resource.data)
+        && immutableFieldsUnchanged(['uid', 'email', 'created_at'])
+        && request.resource.data.uid == resource.data.uid
+        && (
+          (isOwner(userId) && roleUnchanged())
+          || isAdmin()
+        );
+
+      // Tidak ada penghapusan akun dari client (dilakukan admin/server).
+      allow delete: if isAdmin();
+
+      // Langganan: client hanya baca miliknya; penulisan sepenuhnya server.
+      match /subscriptions/{subId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if false;
+      }
+
+      // Pembayaran: client hanya baca miliknya; penulisan sepenuhnya server.
+      match /payments/{paymentId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // ---------------- api_keys ----------------
+    // Berisi key_hash — TIDAK boleh dibaca client sama sekali.
+    match /api_keys/{keyId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // ---------------- usage_logs ----------------
+    match /usage_logs/{logId} {
+      allow read: if isAuthenticated()
+        && resource.data.user_id == request.auth.uid;
+      allow write: if false;
+    }
+
+    // ---------------- providers & models ----------------
+    match /providers/{providerId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /models/{modelId} {
+      allow read: if true; // daftar model publik (tanpa kredensial provider)
+      allow write: if isAdmin();
+    }
+
+    // ---------------- internal (webhook Paymenku) ----------------
+    match /trx_index/{id}    { allow read, write: if false; }
+    match /ref_index/{id}    { allow read, write: if false; }
+    match /webhook_events/{id} { allow read, write: if false; }
+
+    // ---------------- default deny ----------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

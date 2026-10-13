@@ -1,0 +1,41 @@
+{
+  "name": "cloviela-router",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,web -c green,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "NODE_ENV=production node server/index.js",
+    "preview": "vite preview",
+    "seed": "node scripts/seed.js",
+    "smoke": "node scripts/smoke.js",
+    "mock:upstream": "node scripts/mock-upstream.js",
+    "mock:paymenku": "node scripts/mock-paymenku.js",
+    "test:webhook": "node scripts/test-webhook.js",
+    "dev:all": "concurrently -n api,web,mock -c green,cyan,magenta \"npm:dev:server\" \"npm:dev:web\" \"npm:mock:paymenku\"",
+    "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules --project cloviela1",
+    "deploy:auth": "npx -y firebase-tools@latest deploy --only auth --project cloviela1",
+    "deploy": "npm run build && npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes,auth --project cloviela1",
+    "deploy:vps": "bash deploy/setup-vps.sh",
+    "start:prod": "NODE_ENV=production node server/index.js",
+    "test:rules": "node scripts/test-rules.js",
+    "test:limits": "node scripts/test-limits.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "firebase": "^13.0.0",
+    "firebase-admin": "^14.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.0.7"
+  }
+}

@@ -1,0 +1,38 @@
+# Reverse proxy untuk router.cloviela.my.id → app di :8787
+# Ganti email & domain sesuai punyamu.
+#
+# Cara pakai (Ubuntu/Debian):
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo nano /etc/caddy/Caddyfile        # ganti domain & email
+#   sudo systemctl reload caddy
+#
+# Caddy otomatis mengurus sertifikat HTTPS (Let's Encrypt) — tidak perlu certbot.
+
+router.cloviela.my.id {
+	encode zstd gzip
+
+	# webhook Paymenku & API — teruskan apa adanya (raw body utuh)
+	@api path /api/* /v1/*
+	reverse_proxy @api 127.0.0.1:8787 {
+		# penting untuk webhook: jangan buffer / ubah body
+		flush_interval -1
+	}
+
+	# sisanya: SPA (server Express sudah menyajikan dist/)
+	reverse_proxy 127.0.0.1:8787
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/cloviela.log {
+			roll_size 20mb
+			roll_keep 5
+		}
+	}
+}

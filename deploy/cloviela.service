@@ -1,0 +1,30 @@
+[Unit]
+Description=Cloviela Router (API + web + OpenAI-compatible gateway)
+Documentation=https://router.cloviela.my.id
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cloviela
+WorkingDirectory=/opt/cloviela
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloviela
+
+# environment
+EnvironmentFile=/opt/cloviela/.env
+Environment=NODE_ENV=production
+
+# hardening ringan
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/cloviela
+
+[Install]
+WantedBy=multi-user.target

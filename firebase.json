@@ -1,0 +1,20 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-southeast2",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Cloviela",
+        "supportEmail": "clovvalencied@gmail.com",
+        "authorizedRedirectUris": [
+          "http://localhost:5177",
+          "https://router.cloviela.my.id"
+        ]
+      }
+    }
+  }
+}
