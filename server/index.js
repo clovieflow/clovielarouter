@@ -802,7 +802,7 @@ app.post('/api/admin/models/:id/test', ...adminChain, asyncRoute(async (req, res
       body: JSON.stringify({
         model: m.upstream_name || m.model_id,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 32,
+        max_tokens: 512,
         stream: false,
       }),
     });
@@ -816,7 +816,8 @@ app.post('/api/admin/models/:id/test', ...adminChain, asyncRoute(async (req, res
 
     try {
       const j = JSON.parse(text);
-      reply = j?.choices?.[0]?.message?.content ?? j?.choices?.[0]?.text ?? null;
+      const msgObj = j?.choices?.[0]?.message ?? null;
+      reply = msgObj?.content || msgObj?.reasoning_content || j?.choices?.[0]?.text || null;
       usage = j?.usage ?? null;
       if (!reply) parseError = j?.error?.message || 'Respons tidak berisi jawaban.';
     } catch {
@@ -884,7 +885,7 @@ app.post('/api/admin/models/test-all', ...adminChain, asyncRoute(async (req, res
         body: JSON.stringify({
           model: m.upstream_name || m.model_id,
           messages: [{ role: 'user', content: 'ping' }],
-          max_tokens: 8,
+          max_tokens: 100,
           stream: false,
         }),
       });
@@ -896,7 +897,8 @@ app.post('/api/admin/models/test-all', ...adminChain, asyncRoute(async (req, res
       let reason = null;
       try {
         const j = JSON.parse(text);
-        reply = j?.choices?.[0]?.message?.content ?? null;
+        const msgObj = j?.choices?.[0]?.message ?? null;
+        reply = msgObj?.content || msgObj?.reasoning_content || null;
         if (!reply) {
           ok = false;
           reason = j?.error?.message || 'respons tanpa jawaban';
