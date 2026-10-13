@@ -567,8 +567,11 @@ function AdminProviders() {
         label: upstreamId,
         provider_id: providerId,
         upstream_name: upstreamId,
+        auto_sanitize: true,   // upstream sering "vendor/nama" → ID jadi "vendor-nama"
       });
-      flash(`Model "${upstreamId}" ditambahkan dari ${p?.name}.`);
+      flash(upstreamId.includes('/')
+        ? `Model ditambahkan: "${upstreamId}" → ID publik "${upstreamId.replace(/\\/g, '-').replace(/\//g, '-')}" (dari ${p?.name}).`
+        : `Model "${upstreamId}" ditambahkan dari ${p?.name}.`);
       load();
     } catch (e) {
       setErr(e.message);

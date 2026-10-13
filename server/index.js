@@ -30,7 +30,7 @@ const API_BASE = (process.env.PUBLIC_API_BASE || `${APP_URL}/v1`).replace(/\/+$/
 
 // raw body untuk webhook (signature dihitung dari raw body)
 app.use('/api/webhook/paymenku', express.raw({ type: '*/*', limit: '1mb' }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '4mb' }));
 app.use(cookieParser());
 
 // Semua endpoint dinamis: jangan di-cache browser/proxy.
@@ -1183,13 +1183,34 @@ app.post('/api/admin/models/test-all', ...adminChain, asyncRoute(async (req, res
 }));
 
 app.post('/api/admin/models', ...adminChain, asyncRoute(async (req, res) => {
-  const { model_id, label, provider_id } = req.body || {};
+  const { model_id, label, provider_id, upstream_name, auto_sanitize } = req.body || {};
   if (!model_id || !label || !provider_id) {
     return fail(res, 400, 'model_id, label & provider_id wajib.', 'invalid');
   }
-  const exists = await store.getModel(model_id);
-  if (exists) return fail(res, 409, `Alias "${model_id}" sudah dipakai.`, 'duplicate');
-  res.json({ model: await store.createModel(req.body) });
+
+  const clean = (v) =>
+    String(v).trim().replace(/[\\/]+/g, '-').replace(/\s+/g, '-').replace(/-+/g, '-');
+
+  // quick-add dari daftar upstream: ID "vendor/nama" otomatis jadi "vendor-nama".
+  // Form manual: tetap ditolak dengan pesan jelas (biar admin sadar ID publiknya).
+  const finalId = auto_sanitize ? clean(model_id) : model_id;
+  if (/[\\/]/.test(finalId)) {
+    return fail(res, 400, 'model_id tidak boleh mengandung "/" — pakai minus (mis. mistral-codestral-latest).', 'invalid_id');
+  }
+  if (/[\\/]/.test(label)) {
+    return fail(res, 400, 'label tidak boleh mengandung "/" atau "\\".', 'invalid_id');
+  }
+
+  const exists = await store.getModel(finalId);
+  if (exists) return fail(res, 409, `Alias "${finalId}" sudah dipakai.`, 'duplicate');
+
+  const created = await store.createModel({
+    model_id: finalId,
+    label,
+    provider_id,
+    upstream_name: upstream_name || model_id,   // upstream boleh tetap ber-"/"
+  });
+  res.json({ model: created, sanitized: auto_sanitize ? finalId !== model_id : false });
 }));
 
 app.patch('/api/admin/models/:id', ...adminChain, asyncRoute(async (req, res) => {
@@ -1377,6 +1398,9 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use((err, _req, res, _next) => {
   console.error('[error]', err);
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: { message: 'Data terlalu besar (maks 4 MB).', code: 'payload_too_large' } });
+  }
   res.status(500).json({ error: { message: 'Server error.', code: 'internal' } });
 });
 

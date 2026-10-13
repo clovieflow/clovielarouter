@@ -461,8 +461,16 @@ export async function getModel(modelId) {
   };
 }
 
+/**
+ * SANITASI ID: Firestore melarang "/" di doc ID. Model upstream sering
+ * berbentuk "vendor/nama" (mis. Mistral/codestral-latest) — garis miring
+ * diganti minus supaya bisa dipakai sebagai ID publik yang aman.
+ */
+const safeModelId = (id) =>
+  String(id || '').trim().replace(/\\/g, '-').replace(/\//g, '-').replace(/\s+/g, '-').replace(/-+/g, '-');
+
 export async function createModel(data) {
-  const ref = db.collection(C.models).doc(data.model_id);
+  const ref = db.collection(C.models).doc(safeModelId(data.model_id));
   const doc = {
     model_id: data.model_id,
     label: data.label,
@@ -513,12 +521,14 @@ export async function aliasTaken(alias, exceptId = null) {
  * upstream_name TIDAK berubah, jadi routing tetap benar.
  */
 export async function renameModelAlias(oldId, newId) {
+  const target = safeModelId(newId);
+  if (!target) return null;
   const old = await getModel(oldId);
   if (!old) return null;
   const { id, provider_name, provider_base_url, provider_api_key, provider_enabled, ...data } = old;
-  await db.collection(C.models).doc(newId).set({ ...data, model_id: newId });
-  if (newId !== oldId) await db.collection(C.models).doc(oldId).delete();
-  return getModel(newId);
+  await db.collection(C.models).doc(target).set({ ...data, model_id: target });
+  if (target !== oldId) await db.collection(C.models).doc(oldId).delete();
+  return getModel(target);
 }
 
 export async function updateModel(id, patch) {
