@@ -335,34 +335,86 @@ export async function usageSummary(uid) {
     .filter((r) => new Date(iso(r.created_at) || 0).getTime() > since)
     .sort((a, b) => new Date(iso(b.created_at) || 0) - new Date(iso(a.created_at) || 0));
   const daily = {};
+  const dailyErr = {};
+  const dailyLatency = {};
   const byModel = {};
+  const byModelTokens = {};
+  const byModelErr = {};
   let latencySum = 0;
   let latencyN = 0;
+  let errCount = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
   let today = 0;
+  let last24 = 0;
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
+  const since24 = Date.now() - 864e5;
 
   for (const r of rows) {
     const d = iso(r.created_at)?.slice(0, 10);
-    if (d) daily[d] = (daily[d] || 0) + 1;
-    if (r.model) byModel[r.model] = (byModel[r.model] || 0) + 1;
+    const isErr = r.status_code >= 400;
+    if (isErr) errCount++;
+    if (d) {
+      daily[d] = (daily[d] || 0) + 1;
+      if (isErr) dailyErr[d] = (dailyErr[d] || 0) + 1;
+      if (r.latency_ms) dailyLatency[d] = Math.max(dailyLatency[d] || 0, r.latency_ms);
+    }
+    if (r.model) {
+      byModel[r.model] = (byModel[r.model] || 0) + 1;
+      tokensIn += r.tokens_in || 0;
+      tokensOut += r.tokens_out || 0;
+      byModelTokens[r.model] = byModelTokens[r.model] || { in: 0, out: 0 };
+      byModelTokens[r.model].in += r.tokens_in || 0;
+      byModelTokens[r.model].out += r.tokens_out || 0;
+      if (isErr) byModelErr[r.model] = (byModelErr[r.model] || 0) + 1;
+    }
     if (r.latency_ms) {
       latencySum += r.latency_ms;
       latencyN++;
     }
-    if (iso(r.created_at) && new Date(iso(r.created_at)) >= dayStart) today++;
+    if (iso(r.created_at)) {
+      const t = new Date(iso(r.created_at)).getTime();
+      if (t >= dayStart.getTime()) today++;
+      if (t >= since24) last24++;
+    }
   }
+
+  // RPM teramati puncak: request per menit tertinggi dalam 30 hari
+  const perMinute = {};
+  for (const r of rows) {
+    const m = iso(r.created_at)?.slice(0, 16); // menit
+    if (m) perMinute[m] = (perMinute[m] || 0) + 1;
+  }
+  const peakRpm = Math.max(0, ...Object.values(perMinute));
 
   return {
     daily: Object.entries(daily)
-      .map(([day, requests]) => ({ day, requests }))
+      .map(([day, requests]) => ({
+        day,
+        requests,
+        errors: dailyErr[day] || 0,
+        max_ms: dailyLatency[day] || null,
+      }))
       .sort((a, b) => a.day.localeCompare(b.day)),
     byModel: Object.entries(byModel)
-      .map(([model, requests]) => ({ model, requests }))
+      .map(([model, requests]) => ({
+        model,
+        requests,
+        errors: byModelErr[model] || 0,
+        tokens_in: byModelTokens[model]?.in || null,
+        tokens_out: byModelTokens[model]?.out || null,
+      }))
       .sort((a, b) => b.requests - a.requests),
     totals: {
       total: rows.length,
       today,
+      last24,
+      err_count: errCount,
+      err_rate: rows.length ? Math.round((errCount / rows.length) * 1000) / 10 : 0,
+      tokens_in: tokensIn || null,
+      tokens_out: tokensOut || null,
+      peak_rpm: peakRpm || null,
       avg_ms: latencyN ? Math.round(latencySum / latencyN) : null,
     },
     recent: rows.slice(0, 20).map((r) => ({

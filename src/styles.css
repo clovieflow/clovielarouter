@@ -317,6 +317,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bar { flex: 1; background: #3cf0a033; border-radius: 3px 3px 0 0; min-height: 3px; }
 .bar:hover { background: #3cf0a066; }
 
+/* usage tingkat lanjut */
+.usage-bar-wrap { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; cursor: default; }
+.usage-bar-wrap .bar { border-radius: 3px 3px 0 0; }
+.usage-err {
+  position: absolute; bottom: 0; left: 20%; right: 20%;
+  background: var(--red); opacity: .75; border-radius: 3px;
+}
+.usage-track { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.usage-fill { height: 100%; background: linear-gradient(90deg, #1f9d6b, var(--green)); border-radius: 3px; }
+.recent-row { padding: 8px 10px; border-radius: 8px; }
+.recent-row:hover { background: #ffffff06; }
+.recent-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.recent-dot.ok { background: var(--green); }
+.recent-dot.red { background: var(--red); }
+
 .key-reveal {
   background: var(--green-dim); border: 1px solid #1d4a35;
   border-radius: var(--radius); padding: 16px;

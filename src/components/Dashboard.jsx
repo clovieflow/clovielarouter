@@ -509,81 +509,161 @@ export function Keys({ user, refresh, config }) {
 
 /* ── Usage ───────────────────────────────────────── */
 
+const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString('id-ID'));
+const fmtTok = (n) => {
+  if (n == null) return '—';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + ' jt';
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace('.', ',') + ' rb';
+  return String(n);
+};
+const fmtDay = (iso) => {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+};
+
 export function Usage() {
   const [usage, setUsage] = useState(null);
   const [err, setErr] = useState('');
+  const [range, setRange] = useState(30); // 7 | 14 | 30 hari
+
   useEffect(() => {
     api.usage()
       .then(setUsage)
       .catch((e) => { setErr(e.message || 'gagal memuat'); setUsage({}); });
   }, []);
 
-  const max = Math.max(1, ...(usage?.daily || []).map((d) => d.requests));
+  const allDaily = usage?.daily || [];
+  const daily = allDaily.slice(-range);
+  const max = Math.max(1, ...daily.map((d) => d.requests));
+
+  const totals = usage?.totals || {};
+  const sum7 = allDaily.slice(-7).reduce((a, b) => a + b.requests, 0);
+  const prev7 = allDaily.slice(-14, -7).reduce((a, b) => a + b.requests, 0);
+  const weekDelta = prev7 ? Math.round(((sum7 - prev7) / prev7) * 100) : null;
+  const total30 = allDaily.reduce((a, b) => a + b.requests, 0);
+  const errRate = totals.err_rate ?? 0;
+  const successRate = Math.max(0, 100 - errRate).toFixed(1).replace('.', ',');
+  const byModel = usage?.byModel || [];
+  const modelMax = Math.max(1, ...byModel.map((m) => m.requests));
 
   return (
     <>
-      <div className="page-head"><h1>Usage</h1></div>
+      <div className="page-head">
+        <div>
+          <h1>Usage</h1>
+          <p className="small text-muted mt-4">Aktivitas {range} hari terakhir via API key-mu.</p>
+        </div>
+        <div className="row gap-8">
+          {[7, 14, 30].map((r) => (
+            <button key={r} className={`btn btn-sm ${range === r ? 'btn-primary' : ''}`}
+                    onClick={() => setRange(r)}>{r} hari</button>
+          ))}
+        </div>
+      </div>
 
       {err && <div className="alert alert-red mb-16">Gagal memuat usage: {err}</div>}
 
-      <div className="kpi-grid mb-24">
-        <Kpi label="HARI INI" value={usage?.totals?.today ?? '—'} />
-        <Kpi label="30 HARI" value={(usage?.daily || []).reduce((a, b) => a + b.requests, 0)} />
-        <Kpi label="TOTAL" value={usage?.totals?.total ?? '—'} />
-        <Kpi label="AVG LATENSI" value={usage?.totals?.avg_ms ? `${usage.totals.avg_ms} ms` : '—'} />
+      {/* KPI utama */}
+      <div className="kpi-grid mb-16">
+        <Kpi label="HARI INI" value={fmtNum(totals.today)} tone={totals.today > 0 ? 'green' : undefined} />
+        <Kpi label="7 HARI TERAKHIR" value={fmtNum(sum7)}
+             tone={weekDelta == null ? undefined : weekDelta >= 0 ? 'green' : 'amber'} />
+        <Kpi label="SUKSES" value={`${successRate}%`}
+             tone={errRate === 0 ? 'green' : errRate > 5 ? 'red' : 'amber'} />
+        <Kpi label="AVG LATENSI" value={totals.avg_ms ? `${fmtNum(totals.avg_ms)} ms` : '—'} />
       </div>
 
+      <div className="kpi-grid mb-24">
+        <Kpi label="30 HARI" value={fmtNum(total30)} />
+        <Kpi label="PEAK RPM" value={fmtNum(totals.peak_rpm)} />
+        <Kpi label="TOKEN MASUK" value={fmtTok(totals.tokens_in)} />
+        <Kpi label="TOKEN KELUAR" value={fmtTok(totals.tokens_out)} />
+      </div>
+
+      {/* chart harian dengan error overlay */}
       <div className="card mb-16">
-        <strong>Request harian</strong>
+        <div className="row between wrap gap-12">
+          <strong>Request harian</strong>
+          <span className="tiny-mono">
+            ▉ request <span className="text-red" style={{ marginLeft: 10 }}>▉</span> error
+          </span>
+        </div>
         <div className="mt-24">
-          <div className="bar-chart" style={{ height: 140 }}>
-            {(usage?.daily || []).map((d) => (
-              <div key={d.day} className="bar" title={`${d.day}: ${d.requests} req · avg ${d.avg_ms}ms`}
-                   style={{ height: `${Math.max(3, (d.requests / max) * 100)}%` }} />
+          <div className="bar-chart" style={{ height: 150 }}>
+            {daily.map((d) => (
+              <div key={d.day} className="usage-bar-wrap"
+                   title={`${fmtDay(d.day)} — ${d.requests} request${d.errors ? ` · ${d.errors} error` : ''}${d.max_ms ? ` · puncak ${d.max_ms} ms` : ''}`}>
+                <div className="bar" style={{ height: `${Math.max(3, (d.requests / max) * 100)}%`,
+                                              opacity: d.requests ? 1 : .25 }} />
+                {d.errors > 0 && (
+                  <div className="usage-err" style={{ height: `${Math.max(6, (d.errors / max) * 100)}%` }} />
+                )}
+              </div>
             ))}
+            {!daily.length && <div className="small text-dim" style={{ padding: 24 }}>Belum ada data.</div>}
           </div>
           <div className="row between tiny-mono mt-8">
-            <span>30 hari lalu</span><span>hari ini</span>
+            <span>{daily[0] ? fmtDay(daily[0].day) : ''}</span>
+            <span>{daily.length ? `${daily.length} hari` : ''}</span>
+            <span>hari ini</span>
           </div>
         </div>
+        {weekDelta != null && (
+          <p className="tiny text-dim mt-16">
+            Minggu ini {fmtNum(sum7)} request,{' '}
+            {weekDelta >= 0 ? '+' : ''}{weekDelta}% dibanding minggu sebelumnya.
+          </p>
+        )}
       </div>
 
       <div className="grid-2">
+        {/* per model dengan bar proporsi */}
         <div className="card">
           <strong>Per model</strong>
-          <table className="table mt-16">
-            <thead><tr><th>Model</th><th style={{ textAlign: 'right' }}>Request</th></tr></thead>
-            <tbody>
-              {(usage?.byModel || []).map((m) => (
-                <tr key={m.model}>
-                  <td className="mono tiny" data-label="Model">{m.model}</td>
-                  <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Request">{m.requests}</td>
-                </tr>
-              ))}
-              {!usage?.byModel?.length && <tr><td colSpan={2} className="text-dim small">Belum ada data.</td></tr>}
-            </tbody>
-          </table>
+          <div className="stack gap-12 mt-16">
+            {byModel.slice(0, 8).map((m) => (
+              <div key={m.model}>
+                <div className="row between small">
+                  <span className="mono tiny">{m.model}</span>
+                  <span className="mono tiny text-muted">
+                    {fmtNum(m.requests)}
+                    {m.tokens_in != null && ` · ${fmtTok((m.tokens_in || 0) + (m.tokens_out || 0))} tok`}
+                  </span>
+                </div>
+                <div className="usage-track mt-4">
+                  <div className="usage-fill" style={{ width: `${(m.requests / modelMax) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+            {!byModel.length && <p className="small text-dim">Belum ada data — jalankan request pertamamu dari halaman Model.</p>}
+          </div>
         </div>
 
+        {/* aktivitas terkini dengan token & waktu relatif */}
         <div className="card">
           <strong>Request terakhir</strong>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table mt-16">
-              <thead><tr><th>Waktu</th><th>Model</th><th>Status</th></tr></thead>
-              <tbody>
-                {(usage?.recent || []).slice(0, 10).map((r) => (
-                  <tr key={r.request_id}>
-                    <td className="mono tiny" data-label="Waktu">{new Date(r.created_at + 'Z').toLocaleTimeString('id-ID')}</td>
-                    <td className="mono tiny" data-label="Model">{r.model}</td>
-                    <td className={`mono tiny ${r.status_code >= 400 ? 'text-red' : 'text-green'}`} data-label="Status">
-                      {r.status_code} · {r.latency_ms}ms
-                    </td>
-                  </tr>
-                ))}
-                {!usage?.recent?.length && <tr><td colSpan={3} className="text-dim small">Belum ada request.</td></tr>}
-              </tbody>
-            </table>
+          <div className="stack gap-10 mt-16">
+            {(usage?.recent || []).slice(0, 8).map((r) => (
+              <div key={r.request_id} className="row between gap-12 small recent-row">
+                <div className="row gap-8" style={{ minWidth: 0 }}>
+                  <span className={`recent-dot ${r.status_code >= 400 ? 'red' : 'ok'}`} />
+                  <span className="mono tiny" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.model}
+                  </span>
+                </div>
+                <span className="tiny text-dim nowrap">
+                  {r.latency_ms ? `${r.latency_ms} ms` : '—'}
+                  {(r.tokens_in || r.tokens_out) ? ` · ${fmtTok((r.tokens_in || 0) + (r.tokens_out || 0))} tok` : ''}
+                  {' · '}
+                  {new Date(r.created_at + 'Z').toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            ))}
+            {!usage?.recent?.length && <p className="small text-dim">Belum ada request.</p>}
           </div>
+          <p className="tiny text-dim mt-16">
+            Log lengkap + filter ada di menu <button className="btn-ghost btn-sm" style={{ padding: 0 }} onClick={() => navigate('/dashboard/logs')}>Log</button>.
+          </p>
         </div>
       </div>
     </>

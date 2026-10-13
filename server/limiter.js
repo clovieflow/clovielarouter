@@ -41,6 +41,13 @@ function takeToken(key, limit, windowMs = 60_000) {
   return { ok: true, remaining: Math.floor(b.tokens) };
 }
 
+/** Kembalikan token yang sudah diambil (dipakai kalau request batal di middleware berikutnya). */
+function refundToken(key, limit) {
+  const b = buckets.get(key);
+  if (!b) return;
+  b.tokens = Math.min(limit, b.tokens + 1);
+}
+
 /* ───────────────────────── concurrency ───────────────────────── */
 
 function acquireSlot(key, max) {
@@ -65,11 +72,11 @@ const num = (v, d) => {
 
 export const limits = {
   // kuota global — melindungi provider
-  globalRpm: num(process.env.GLOBAL_RPM, 60),
-  globalConcurrent: num(process.env.GLOBAL_CONCURRENT, 5),
+  globalRpm: num(process.env.GLOBAL_RPM, 90),
+  globalConcurrent: num(process.env.GLOBAL_CONCURRENT, 8),
   // per user — 0 = matikan
-  userRpm: num(process.env.USER_RPM, 30),
-  userConcurrent: num(process.env.USER_CONCURRENT, 3),
+  userRpm: num(process.env.USER_RPM, 40),
+  userConcurrent: num(process.env.USER_CONCURRENT, 4),
 };
 
 export const limitsEnabled = () => limits.globalRpm > 0 || limits.userRpm > 0;
@@ -95,12 +102,14 @@ export function rateLimit() {
       }
     }
 
-    // 2. kuota per user
+    // 2. kuota per user — kalau mentok, token global yang sudah diambil
+    //    DIKEMBALIKAN supaya bucket global tidak terkuras oleh request gagal.
     let userRemaining = null;
     if (limits.userRpm > 0) {
       const u = takeToken(userKey, limits.userRpm);
       if (!u.ok) {
         stats.blocked_rpm++;
+        if (limits.globalRpm > 0) refundToken(globalKey, limits.globalRpm);
         return tooMany(res, limits.userRpm, u.retryAfter, 'user');
       }
       userRemaining = u.remaining;
