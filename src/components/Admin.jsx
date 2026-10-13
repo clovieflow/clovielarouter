@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import { api, rupiah, shortDate, relative } from '../api';
 import { navigate } from '../hooks';
 
+/** Tutup modal dengan Esc (dipakai dialog admin). */
+function useEscape(active, onClose) {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, onClose]);
+}
+
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'users', label: 'Users' },
@@ -26,7 +36,7 @@ export function Admin({ user }) {
       <div className="row between wrap gap-16 mb-24">
         <div>
           <h1 style={{ fontSize: 24 }}>cloviela admin</h1>
-          <p className="small text-muted mt-4">Monitoring & konfigurasi. Notifikasi Telegram aktif untuk pembayaran.</p>
+          <p className="small text-muted mt-4">Monitoring & konfigurasi. Notifikasi Telegram {`aktif untuk pembayaran`}.</p>
         </div>
         <button className="btn btn-sm" onClick={() => navigate('/dashboard')}>← dashboard user</button>
       </div>
@@ -77,22 +87,26 @@ function AdminOverview() {
 
   return (
     <>
-      <div className="kpi-grid mb-24">
-        <Kpi label="USER" value={s.users} />
-        <Kpi label="LANGGANAN AKTIF" value={s.active_subs} tone="green" />
-        <Kpi label="PENDING" value={s.pending_payments} tone={s.pending_payments ? 'amber' : undefined} />
-        <Kpi label="REVENUE" value={rupiah(s.revenue_idr)} tone="green" />
+      <div className="usage-kpis mb-24">
+        <Kpi label="USER" value={s.users} sub="terdaftar" />
+        <Kpi label="LANGGANAN AKTIF" value={s.active_subs} tone="green" sub="masa berjalan" />
+        <Kpi label="PENDING" value={s.pending_payments} tone={s.pending_payments ? 'amber' : undefined}
+             sub={s.pending_payments ? 'perlu dicek' : 'tidak ada antrean'} />
+        <Kpi label="REVENUE" value={rupiah(s.revenue_idr)} tone="green" sub="total terbayar" />
+        <Kpi label="REQUEST 24 JAM" value={s.requests_24h} sub="via API + playground" />
+        <Kpi label="ERROR RATE 24 JAM" value={`${s.error_rate}%`}
+             tone={s.error_rate > 5 ? 'amber' : s.error_rate === 0 ? 'green' : undefined}
+             sub={s.error_rate > 5 ? 'perlu dicek' : 'sehat'} />
       </div>
-      <div className="grid-3">
-        <Kpi label="REQUEST 24 JAM" value={s.requests_24h} />
-        <Kpi label="ERROR RATE 24 JAM" value={`${s.error_rate}%`} tone={s.error_rate > 5 ? 'amber' : undefined} />
-        <div className="card card-tight">
-          <div className="tiny-mono mb-8">PROVIDER</div>
+
+      <div className="card">
+        <strong>Status provider</strong>
+        <div className="stack gap-8 mt-16">
           {s.providers.map((p) => (
-            <div key={p.id} className="row between small">
+            <div key={p.id} className="row between small recent-row">
               <span>{p.name}</span>
               <span className={`mono tiny ${p.enabled ? 'text-green' : 'text-red'}`}>
-                {p.model_enabled}/{p.model_count}
+                {p.model_enabled}/{p.model_count} model
               </span>
             </div>
           ))}
@@ -103,12 +117,13 @@ function AdminOverview() {
   );
 }
 
-function Kpi({ label, value, tone }) {
+function Kpi({ label, value, tone, sub }) {
   return (
-    <div className="card card-tight">
+    <div className="kpi-cell">
       <div className="tiny-mono">{label}</div>
-      <div className={`mono mt-8 ${tone === 'green' ? 'text-green' : tone === 'amber' ? 'text-amber' : ''}`}
-           style={{ fontSize: 24 }}>{value}</div>
+      <div className={`mono mt-4 ${tone === 'green' ? 'text-green' : tone === 'amber' ? 'text-amber' : tone === 'red' ? 'text-red' : ''}`}
+           style={{ fontSize: 20 }}>{value}</div>
+      {sub && <div className="tiny text-dim mt-4">{sub}</div>}
     </div>
   );
 }
@@ -123,13 +138,40 @@ function AdminUsers() {
   const load = (query = '') => api.admin.users(query).then((r) => setUsers(r.users)).catch(() => {});
   useEffect(() => { load(); }, []);
 
-  const extend = async (u, days) => {
-    const r = await api.admin.extend(u.id, days);
-    setMsg(r.key_raw
-      ? `Key baru untuk ${u.email}: ${r.key_raw} (copy sekarang, hanya tampil sekali)`
-      : `Langganan ${u.email} diperpanjang.`);
-    load(q);
+  // dialog tambah waktu — angka bebas + satuan (hari/jam/menit)
+  const [extFor, setExtFor] = useState(null);   // user yang sedang dibuka dialognya
+  const [extAmt, setExtAmt] = useState('');
+  const [extUnit, setExtUnit] = useState('jam');
+  const [extErr, setExtErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const openExtend = (u) => {
+    setExtFor(u);
+    setExtAmt('');
+    setExtUnit('jam');
+    setExtErr('');
   };
+
+  const submitExtend = async () => {
+    const amt = Number(extAmt.replace(',', '.'));
+    if (!(amt > 0)) { setExtErr('Isi angka > 0.'); return; }
+    setBusy(true); setExtErr('');
+    try {
+      const r = await api.admin.extend(extFor.id, amt, extUnit);
+      setMsg(r.key_raw
+        ? `Key baru untuk ${extFor.email}: ${r.key_raw} (copy sekarang, hanya tampil sekali)`
+        : `+${fmtAmt(amt, extUnit)} untuk ${extFor.email} — aktif sampai ${new Date(r.expires_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.`);
+      setExtFor(null);
+      load(q);
+    } catch (e) {
+      setExtErr(e.message);
+    } finally { setBusy(false); }
+  };
+
+  const fmtAmt = (n, unit) =>
+    unit === 'jam' ? `${n} jam` : unit === 'menit' ? `${n} menit` : `${n} hari`;
+
+  useEscape(!!extFor, () => !busy && setExtFor(null));
 
   const revoke = async (u) => {
     if (!confirm(`Revoke semua key ${u.email}?`)) return;
@@ -155,46 +197,80 @@ function AdminUsers() {
       )}
 
       <div className="card card-flush">
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Email</th><th>Status</th><th>Expires</th><th>Key</th>
-                <th>Request</th><th>Daftar</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => {
-                const active = u.sub_status === 'active' && u.expires_at && new Date(u.expires_at) > new Date();
-                return (
-                  <tr key={u.id}>
-                    <td data-label="User">
-                      <div className="small">{u.name}</div>
-                      <div className="tiny text-dim">{u.email}</div>
-                    </td>
-                    <td data-label="Status">
-                      <span className={`pill ${active ? 'pill-green' : u.sub_status === 'pending' ? 'pill-amber' : 'pill-red'}`}>
-                        {active ? 'aktif' : u.sub_status || 'belum'}
-                      </span>
-                    </td>
-                    <td className="tiny" data-label="Expires">{shortDate(u.expires_at)}</td>
-                    <td className="mono tiny" data-label="Key">{u.key_prefix || '—'}</td>
-                    <td className="mono tiny" data-label="Request">{u.requests}</td>
-                    <td className="tiny text-dim" data-label="Daftar">{relative(u.created_at)}</td>
-                    <td>
-                      <div className="row gap-4">
-                        <button className="btn btn-sm" onClick={() => extend(u, 7)}>+7d</button>
-                        <button className="btn btn-sm" onClick={() => extend(u, 30)}>+30d</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => revoke(u)}>revoke</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!users.length && <tr><td colSpan={7} className="text-dim small" style={{ padding: 20 }}>Tidak ada user.</td></tr>}
-            </tbody>
-          </table>
+        <div className="log-list">
+          {users.map((u) => {
+            const active = u.sub_status === 'active' && u.expires_at && new Date(u.expires_at) > new Date();
+            return (
+              <div key={u.id} className="log-row" style={{ cursor: 'default' }}>
+                <span className={`recent-dot ${active ? 'ok' : u.sub_status === 'pending' ? 'warn-dot' : 'off'}`}
+                      title={active ? 'langganan aktif' : u.sub_status || 'belum berlangganan'} />
+                <span className="log-main">
+                  <span className="log-line1">
+                    <span className="small">{u.name || u.email}</span>
+                    {u.name && <span className="tiny text-dim">· {u.email}</span>}
+                  </span>
+                  <span className="log-line2">
+                    {active ? `aktif sampai ${shortDate(u.expires_at)}` : u.sub_status || 'belum berlangganan'}
+                    {' · '}
+                    {u.requests} request · daftar {relative(u.created_at)}
+                    {u.key_prefix ? ` · key ${u.key_prefix}…` : ''}
+                  </span>
+                </span>
+                <span className={`pill ${active ? 'pill-green' : u.sub_status === 'pending' ? 'pill-amber' : 'pill-red'}`}>
+                  {active ? 'aktif' : u.sub_status || 'belum'}
+                </span>
+                <span className="row gap-4 admin-user-actions">
+                  <button className="btn btn-sm" title="tambah waktu manual" onClick={() => openExtend(u)}>+ waktu</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => revoke(u)}>revoke</button>
+                </span>
+              </div>
+            );
+          })}
+          {!users.length && <div className="small text-dim" style={{ padding: 20 }}>Tidak ada user.</div>}
         </div>
+
+        {extFor && (
+          <div className="modal-back" onClick={() => !busy && setExtFor(null)}>
+            <div className="modal detail-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="row between mb-16">
+                <div>
+                  <strong>Tambah waktu</strong>
+                  <div className="tiny text-dim mt-4">{extFor.name || extFor.email}</div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setExtFor(null)} disabled={busy}>×</button>
+              </div>
+
+              <div className="row gap-8">
+                <input className="input" style={{ maxWidth: 120 }} inputMode="decimal"
+                       placeholder="mis. 1" autoFocus value={extAmt}
+                       onChange={(e) => setExtAmt(e.target.value)} />
+                <select className="select" style={{ maxWidth: 110 }} value={extUnit}
+                        onChange={(e) => setExtUnit(e.target.value)}>
+                  <option value="menit">menit</option>
+                  <option value="jam">jam</option>
+                  <option value="hari">hari</option>
+                </select>
+              </div>
+
+              <div className="row gap-8 wrap mt-8">
+                {[['1 jam', 1, 'jam'], ['6 jam', 6, 'jam'], ['1 hari', 1, 'hari'], ['7 hari', 7, 'hari'], ['30 hari', 30, 'hari']].map(([label, n, u]) => (
+                  <button key={label} className="btn btn-sm" onClick={() => { setExtAmt(String(n)); setExtUnit(u); }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {extErr && <div className="alert alert-red mt-16">{extErr}</div>}
+
+              <button className="btn btn-primary btn-block mt-16" onClick={submitExtend} disabled={busy}>
+                {busy ? 'Menyimpan…' : `Tambah waktu →`}
+              </button>
+              <p className="tiny text-dim mt-8">
+                Ditambahkan dari sekarang kalau langganan belum aktif, atau dari sisa masa aktif kalau masih jalan.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
@@ -208,32 +284,27 @@ function AdminPayments() {
 
   return (
     <div className="card card-flush">
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead>
-            <tr><th>Waktu</th><th>User</th><th>Metode</th><th>Nominal</th><th>Trx</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <tr key={p.id}>
-                <td className="tiny" data-label="Waktu">{relative(p.created_at)}</td>
-                <td data-label="User">
-                  <div className="tiny">{p.name}</div>
-                  <div className="tiny text-dim">{p.email}</div>
-                </td>
-                <td className="mono tiny" data-label="Metode">{p.channel}</td>
-                <td className="mono tiny" data-label="Nominal">{rupiah(p.amount_idr)}</td>
-                <td className="mono tiny" data-label="Trx">{p.trx_id || '—'}</td>
-                <td data-label="Status">
-                  <span className={`pill ${p.status === 'paid' ? 'pill-green' : p.status === 'pending' ? 'pill-amber' : 'pill-red'}`}>
-                    {p.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {!rows.length && <tr><td colSpan={6} className="text-dim small" style={{ padding: 20 }}>Belum ada pembayaran.</td></tr>}
-          </tbody>
-        </table>
+      <div className="log-list">
+        {rows.map((p) => (
+          <div key={p.id} className="log-row" style={{ cursor: 'default' }}>
+            <span className={`recent-dot ${p.status === 'paid' ? 'ok' : p.status === 'pending' ? 'warn-dot' : 'red'}`} />
+            <span className="log-main">
+              <span className="log-line1">
+                <span className="small">{p.name || p.email || '—'}</span>
+                {p.name && <span className="tiny text-dim">· {p.email}</span>}
+              </span>
+              <span className="log-line2">
+                {relative(p.created_at)} · {p.channel}
+                {p.trx_id ? ` · ${String(p.trx_id).slice(0, 20)}` : ''}
+              </span>
+            </span>
+            <span className="mono small nowrap">{rupiah(p.amount_idr)}</span>
+            <span className={`pill ${p.status === 'paid' ? 'pill-green' : p.status === 'pending' ? 'pill-amber' : 'pill-red'}`}>
+              {p.status}
+            </span>
+          </div>
+        ))}
+        {!rows.length && <div className="small text-dim" style={{ padding: 20 }}>Belum ada pembayaran.</div>}
       </div>
     </div>
   );

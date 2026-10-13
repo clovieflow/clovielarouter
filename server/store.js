@@ -131,10 +131,16 @@ export async function createSubscription(uid, { plan, priceIdr, days, status = '
 }
 
 /** Aktifkan / perpanjang: mulai dari expires_at yang masih berlaku kalau ada. */
+/**
+ * Aktifkan / perpanjang langganan.
+ * @param days    lama dalam hari (bisa pecahan, mis. 1/24 = 1 jam)
+ */
 export async function activateSubscription(uid, subId, days) {
   const current = await activeSubscription(uid);
+  // Tambah waktu SELALU menumpuk di atas sisa masa aktif yang masih berlaku
+  // (admin "+1 jam" harus = sisa + 1 jam, bukan reset ke sekarang + 1 jam).
   const base =
-    current && current.id !== subId && new Date(iso(current.expires_at)) > new Date()
+    current && new Date(iso(current.expires_at)) > new Date()
       ? new Date(iso(current.expires_at))
       : new Date();
   const expires = new Date(base.getTime() + days * 864e5);

@@ -496,7 +496,7 @@ curl ${base}/chat/completions \\
               <tr>
                 <td className="small" data-label="Batas">Request per menit</td>
                 <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Nilai">
-                  {config?.limits?.user_rpm || 30} RPM
+                  {config?.limits?.user_rpm || 40} RPM
                 </td>
                 <td className="tiny text-muted" data-label="Artinya">
                   Kuota diisi ulang bertahap tiap detik, bukan reset tiap menit — jadi request
@@ -506,7 +506,7 @@ curl ${base}/chat/completions \\
               <tr>
                 <td className="small" data-label="Batas">Request bersamaan</td>
                 <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Nilai">
-                  {config?.limits?.user_concurrent || 3}
+                  {config?.limits?.user_concurrent || 4}
                 </td>
                 <td className="tiny text-muted" data-label="Artinya">
                   Jumlah request yang boleh diproses pada saat yang sama.

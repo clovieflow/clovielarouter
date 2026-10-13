@@ -57,7 +57,7 @@ export const api = {
     stats: () => request('/api/admin/stats'),
     users: (q = '') => request(`/api/admin/users?q=${encodeURIComponent(q)}`),
     payments: () => request('/api/admin/payments'),
-    extend: (id, days) => request(`/api/admin/users/${id}/extend`, { method: 'POST', body: { days } }),
+    extend: (id, amount, unit = 'hari') => request(`/api/admin/users/${id}/extend`, { method: 'POST', body: { amount, unit } }),
     revoke: (id) => request(`/api/admin/users/${id}/revoke`, { method: 'POST' }),
     providers: () => request('/api/admin/providers'),
     addProvider: (body) => request('/api/admin/providers', { method: 'POST', body }),

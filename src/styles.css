@@ -27,8 +27,10 @@
 
 html, body, #root { min-height: 100%; }
 
-/* Cegah elemen lebar (pre/code/tabel) merusak layout mobile */
-html, body { max-width: 100%; overflow-x: hidden; }
+/* Cegah elemen lebar (pre/code/tabel) merusak layout mobile.
+   PENTING: pakai `clip`, bukan `hidden` — `hidden` membuat body jadi scroll
+   container sehingga position:sticky sidebar ikut kescroll (bug desktop). */
+html, body { max-width: 100%; overflow-x: hidden; overflow-x: clip; }
 .main, .shell, .shell-narrow, .card, .dash { min-width: 0; max-width: 100%; }
 .stack, .row { min-width: 0; }
 .card { overflow-wrap: anywhere; }
@@ -294,20 +296,34 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--muted); font-size: 14px; white-space: nowrap;
 }
 .side-item:hover { background: #ffffff06; color: var(--text); }
-.side-item.active { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+.side-item.active {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+/* aksen kiri tipis sebagai penanda aktif, bukan strip penuh */
+.side-item.active::before {
+  content: ''; position: absolute; left: 0; top: 20%; bottom: 20%;
+  width: 3px; border-radius: 2px; background: var(--green);
+}
+.side-item { position: relative; }
 .side-label { font-family: var(--mono); font-size: 11px; color: var(--muted-2); padding: 16px 12px 6px; text-transform: uppercase; letter-spacing: .05em; }
 
-/* kartu langganan di sidebar */
+/* kartu langganan di sidebar — ringkas, menyatu dengan profil */
 .sub-card {
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 12px 14px; margin-top: 16px;
+  background: var(--panel-3); border: 1px solid var(--border-soft);
+  border-radius: var(--radius); padding: 11px 13px; margin-top: 16px;
 }
+/* kartu profil langsung di bawahnya: rapatkan & samakan gaya */
+.sub-card + .card-tight { margin-top: 8px; border-color: var(--border-soft); background: var(--panel-3); }
 .sub-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .sub-dot.ok { background: var(--green); box-shadow: 0 0 8px #3cf0a088; }
 .sub-dot.warn { background: var(--amber); box-shadow: 0 0 8px #fbbf2488; }
 .sub-dot.off { background: var(--muted-2); }
 
 .main { padding: 28px 32px 64px; min-width: 0; }
+
+/* drawer mobile wajib mati di desktop (kalau tidak, muncul sebagai sidebar kedua) */
+.side.drawer-side { display: none; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 24px; }
 .page-head h1 { font-size: 24px; }
 
@@ -316,6 +332,70 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bar-chart { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
 .bar { flex: 1; background: #3cf0a033; border-radius: 3px 3px 0 0; min-height: 3px; }
 .bar:hover { background: #3cf0a066; }
+
+/* modal detail request */
+.detail-modal { max-width: 480px; padding: 0; max-height: calc(100dvh - 40px); overflow-y: auto; }
+.detail-head { padding: 18px 20px 16px; border-bottom: 1px solid var(--border-soft); }
+.detail-head.ok { background: linear-gradient(180deg, #0b1f1633, transparent); }
+.detail-head.bad { background: linear-gradient(180deg, #16090b55, transparent); }
+.detail-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; min-width: 0; }
+@media (max-width: 560px) {
+  .detail-stats { gap: 8px; }
+  .detail-stats .mono { font-size: 13px; white-space: nowrap; }
+  .detail-stats .small { font-size: 11px; white-space: nowrap; }
+}
+.detail-field {
+  padding: 10px 0; border-bottom: 1px solid var(--border-soft);
+}
+.detail-field:last-child { border-bottom: none; }
+.detail-field > div:last-child .mono { color: var(--text-2); }
+
+/* log request — baris ramping, bukan kartu besar */
+.log-list { display: flex; flex-direction: column; }
+.log-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 14px; text-align: left;
+  background: none; border: none; border-bottom: 1px solid var(--border-soft);
+  cursor: pointer; color: var(--text); font: inherit;
+}
+.log-row .pill { flex: 0 0 auto; align-self: center; }
+.log-row > .recent-dot { flex: 0 0 auto; }
+.log-row .log-main { justify-content: flex-start; }
+.log-row:hover .log-chevron { color: var(--text); }
+.log-row:last-child { border-bottom: none; }
+.log-row:hover { background: #ffffff06; }
+.log-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.log-line1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.log-line1 .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-id { color: var(--muted-2); }
+.log-line2 { color: var(--muted-2); font-size: 11.5px; }
+.log-chevron { color: var(--muted-2); font-size: 16px; flex: 0 0 auto; }
+
+@media (max-width: 760px) {
+  .log-row { padding: 9px 12px; }
+  .log-id { display: none; }
+  .log-chevron { display: none; }
+  .log-line2 { font-size: 11px; }
+}
+
+/* KPI usage — kotak kompak rapi: 2 kolom (default), 3 kolom hanya di layar lebar
+   supaya nilai panjang (mis. "122,6 rb / 36,8 rb") tidak terpotong ellipsis */
+.usage-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.usage-kpis .kpi-cell {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; min-width: 0;
+}
+.usage-kpis .kpi-cell .tiny-mono { font-size: 10px; letter-spacing: .05em; }
+.usage-kpis .kpi-cell .mono { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (min-width: 1100px) {
+  .usage-kpis { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
+  .usage-kpis { gap: 10px; }
+  .usage-kpis .kpi-cell { padding: 12px 13px; }
+  .usage-kpis .kpi-cell .mono { font-size: 17px; }
+}
 
 /* usage tingkat lanjut */
 .usage-bar-wrap { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; cursor: default; }
@@ -331,6 +411,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .recent-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
 .recent-dot.ok { background: var(--green); }
 .recent-dot.red { background: var(--red); }
+.recent-dot.warn-dot { background: var(--amber); }
+.recent-dot.off { background: var(--muted-2); }
+.admin-user-actions { flex: 0 0 auto; }
+@media (max-width: 760px) {
+  .admin-user-actions { flex-direction: column; align-items: stretch; }
+  .admin-user-actions .btn { padding: 4px 8px; font-size: 11px; }
+}
 
 .key-reveal {
   background: var(--green-dim); border: 1px solid #1d4a35;

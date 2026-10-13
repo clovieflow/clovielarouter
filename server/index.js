@@ -870,7 +870,15 @@ app.get('/api/admin/payments', ...adminChain, asyncRoute(async (_req, res) => {
 
 app.post('/api/admin/users/:id/extend', ...adminChain, asyncRoute(async (req, res) => {
   const uid = req.params.id;
-  const days = Number(req.body?.days || PLAN_DAYS);
+  const amount = Number(req.body?.amount || 0);
+  const unit = (req.body?.unit || 'hari').toString().toLowerCase();
+
+  // unit → hari
+  const inDays = { hari: 1, jam: 1 / 24, menit: 1 / 1440 };
+  if (!inDays[unit]) return fail(res, 400, 'unit harus hari / jam / menit.', 'invalid_unit');
+  if (!(amount > 0) || !Number.isFinite(amount)) return fail(res, 400, 'amount harus angka > 0.', 'invalid_amount');
+  const days = amount * inDays[unit];
+
   const user = await store.getUser(uid);
   if (!user) return fail(res, 404, 'User tidak ditemukan.', 'not_found');
 
@@ -1392,8 +1400,16 @@ function logUsage({ key, model, requestId, status, ms, text }) {
 
 if (process.env.NODE_ENV === 'production') {
   const dist = join(__dirname, '..', 'dist');
-  app.use(express.static(dist));
-  app.get(/^(?!\/api|\/v1).*/, (_req, res) => res.sendFile(join(dist, 'index.html')));
+  // HTML jangan pernah di-cache: supaya bundle terbaru selalu terpakai setelah build.
+  app.use(express.static(dist, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-store');
+    },
+  }));
+  app.get(/^(?!\/api|\/v1).*/, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(join(dist, 'index.html'));
+  });
 }
 
 app.use((err, _req, res, _next) => {

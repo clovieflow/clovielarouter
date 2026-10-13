@@ -192,6 +192,9 @@ export function Models({ user, models, config }) {
 
 /* ─────────────────────────── Log ─────────────────────────── */
 
+const fmtTok = (n) => (n == null ? '—' : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.', ',') + 'rb' : String(n));
+
+
 export function Logs() {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState('');
@@ -281,46 +284,37 @@ export function Logs() {
       {err && <div className="alert alert-red mb-16">{err}</div>}
 
       <div className="card card-flush">
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Waktu</th>
-                <th>Request ID</th>
-                <th>Model</th>
-                <th style={{ textAlign: 'right' }}>Latensi</th>
-                <th style={{ textAlign: 'right' }}>Token in/out</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.logs || []).map((r) => (
-                <tr key={r.request_id}>
-                  <td className="tiny" data-label="Waktu">{fmtTime(r.created_at)}</td>
-                  <td className="mono tiny" data-label="Request ID">{r.request_id?.slice(0, 18)}…</td>
-                  <td className="mono tiny" data-label="Model">{r.model}</td>
-                  <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Latensi">
-                    {r.latency_ms ? `${r.latency_ms} ms` : '—'}
-                  </td>
-                  <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Token">
-                    {r.tokens_in ?? '—'} / {r.tokens_out ?? '—'}
-                  </td>
-                  <td data-label="Status">{statusPill(r.status_code)}</td>
-                  <td>
-                    <button className="btn btn-sm btn-block" onClick={() => setDetail(r)}>detail</button>
-                  </td>
-                </tr>
-              ))}
-              {data && !data.logs.length && (
-                <tr><td colSpan={7} className="text-dim small" style={{ padding: 20 }} data-label="">
-                  Belum ada request{(status || model) ? ' yang cocok dengan filter' : ''}.
-                  {' '}Coba jalankan sesuatu di halaman <em>Model</em>.
-                </td></tr>
-              )}
-              {!data && <tr><td colSpan={7} style={{ padding: 20 }}><div className="skeleton" /></td></tr>}
-            </tbody>
-          </table>
+        <div className="log-list">
+          {(data?.logs || []).map((r) => {
+            const tok = (r.tokens_in != null || r.tokens_out != null)
+              ? `${fmtTok(r.tokens_in)} / ${fmtTok(r.tokens_out)} tok`
+              : null;
+            return (
+              <button key={r.request_id} className="log-row" onClick={() => setDetail(r)}>
+                <span className={`recent-dot ${r.status_code >= 400 ? 'red' : 'ok'}`} />
+                <span className="log-main">
+                  <span className="log-line1">
+                    <span className="mono small">{r.model}</span>
+                    <span className="log-id mono tiny">#{(r.request_id || '').slice(0, 10)}</span>
+                  </span>
+                  <span className="log-line2">
+                    {fmtTime(r.created_at)}
+                    {r.latency_ms ? ` · ${r.latency_ms} ms` : ''}
+                    {tok ? ` · ${tok}` : ''}
+                  </span>
+                </span>
+                {statusPill(r.status_code)}
+                <span className="log-chevron">›</span>
+              </button>
+            );
+          })}
+          {data && !data.logs.length && (
+            <div className="small text-dim" style={{ padding: 20 }}>
+              Belum ada request{(status || model) ? ' yang cocok dengan filter' : ''}.
+              {' '}Coba jalankan sesuatu di halaman <em>Model</em>.
+            </div>
+          )}
+          {!data && <div style={{ padding: 20 }}><div className="skeleton" /></div>}
         </div>
       </div>
 
@@ -341,31 +335,101 @@ export function Logs() {
         </div>
       )}
 
-      {detail && (
-        <div className="modal-back" onClick={() => setDetail(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="row between mb-16">
-              <strong>Detail request</strong>
-              <button className="btn btn-ghost btn-sm" onClick={() => setDetail(null)}>×</button>
+      {detail && <RequestDetail detail={detail} onClose={() => setDetail(null)} statusPill={statusPill} fmtTime={fmtTime} />}
+    </>
+  );
+}
+
+
+/* ─────────────────────────── Detail request ─────────────────────────── */
+
+function RequestDetail({ detail, onClose, statusPill, fmtTime }) {
+  const [copied, setCopied] = useState('');
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const copy = (text, key) => {
+    navigator.clipboard.writeText(String(text ?? ''));
+    setCopied(key);
+    setTimeout(() => setCopied(''), 1500);
+  };
+
+  const ok = detail.status_code < 400;
+  const copyBtn = (val, key) => (
+    <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}
+            onClick={() => copy(val, key)} title="copy">
+      {copied === key ? '✓' : 'copy'}
+    </button>
+  );
+
+  const field = (label, value, key, mono = true) => (
+    <div className="detail-field">
+      <div className="tiny-mono">{label}</div>
+      <div className="row between gap-8 mt-4">
+        <span className={mono ? 'mono small' : 'small'} style={{ wordBreak: 'break-all' }}>
+          {value ?? '—'}
+        </span>
+        {value != null && key && copyBtn(value, key)}
+      </div>
+    </div>
+  );
+
+  const tokIn = detail.tokens_in ?? 0;
+  const tokOut = detail.tokens_out ?? 0;
+  const total = tokIn + tokOut && (detail.tokens_in != null || detail.tokens_out != null) ? tokIn + tokOut : null;
+
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className="modal detail-modal" onClick={(e) => e.stopPropagation()}>
+        {/* header status */}
+        <div className={`detail-head ${ok ? 'ok' : 'bad'}`}>
+          <div className="row between">
+            <div>
+              <div className="tiny-mono" style={{ opacity: .8 }}>Request detail</div>
+              <div className="mono mt-4" style={{ fontSize: 14 }}>#{(detail.request_id || '').slice(0, 18)}…</div>
             </div>
-            <table className="table">
-              <tbody>
-                <tr><td className="tiny text-muted">Request ID</td><td className="mono tiny">{detail.request_id}</td></tr>
-                <tr><td className="tiny text-muted">Waktu</td><td className="tiny">{fmtTime(detail.created_at)}</td></tr>
-                <tr><td className="tiny text-muted">Model</td><td className="mono tiny">{detail.model}</td></tr>
-                <tr><td className="tiny text-muted">Status</td><td>{statusPill(detail.status_code)}</td></tr>
-                <tr><td className="tiny text-muted">Latensi</td><td className="mono tiny">{detail.latency_ms} ms</td></tr>
-                <tr><td className="tiny text-muted">Token masuk</td><td className="mono tiny">{detail.tokens_in ?? '—'}</td></tr>
-                <tr><td className="tiny text-muted">Token keluar</td><td className="mono tiny">{detail.tokens_out ?? '—'}</td></tr>
-              </tbody>
-            </table>
-            <button className="btn btn-block mt-16"
-                    onClick={() => navigator.clipboard.writeText(detail.request_id)}>
-              copy request id
-            </button>
+            <div className="row gap-8">
+              {statusPill(detail.status_code)}
+              <button className="btn btn-ghost btn-sm" onClick={onClose}>×</button>
+            </div>
+          </div>
+          {/* ringkasan cepat */}
+          <div className="detail-stats mt-16">
+            <div>
+              <div className="tiny" style={{ opacity: .75 }}>Latensi</div>
+              <div className="mono" style={{ fontSize: 17 }}>{detail.latency_ms ? `${detail.latency_ms} ms` : '—'}</div>
+            </div>
+            <div>
+              <div className="tiny" style={{ opacity: .75 }}>Token</div>
+              <div className="mono" style={{ fontSize: 17 }}>{total ? total.toLocaleString('id-ID') : '—'}</div>
+            </div>
+            <div>
+              <div className="tiny" style={{ opacity: .75 }}>Waktu</div>
+              <div className="small" style={{ marginTop: 3 }}>{fmtTime(detail.created_at)}</div>
+            </div>
           </div>
         </div>
-      )}
-    </>
+
+        <div className="stack gap-16 mt-16">
+          {field('Model', detail.model, 'model')}
+          {field('Request ID', detail.request_id, 'id')}
+          {detail.tokens_in != null && field('Token masuk', detail.tokens_in.toLocaleString('id-ID'), 'tin')}
+          {detail.tokens_out != null && field('Token keluar', detail.tokens_out.toLocaleString('id-ID'), 'tout')}
+        </div>
+
+        <div className="row gap-8 mt-24">
+          <button className="btn btn-block"
+                  onClick={() => copy(`curl ${window.location.origin}/v1/chat/completions \\
+  -H "Authorization: Bearer $CLOVIELA_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model": "${detail.model}", "messages": [{"role": "user", "content": "Halo"}]}'`)}>
+            copy curl template
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -201,12 +201,16 @@ export function Overview({ user, refresh, config }) {
         </div>
       )}
 
-      <div className="kpi-grid mb-24">
-        <Kpi label={t('usage.today')} value={usage?.totals?.today ?? '—'} />
-        <Kpi label={t('usage.total')} value={usage?.totals?.total ?? '—'} />
-        <Kpi label={t('usage.avg')} value={usage?.totals?.avg_ms ? `${usage.totals.avg_ms} ms` : '—'} />
-        <Kpi label="MASA AKTIF" value={sub ? `${daysLeft} hari` : '—'}
-             tone={expiring ? 'amber' : sub ? 'green' : undefined} />
+      <div className="usage-kpis mb-24">
+        <Kpi label={t('usage.today')} value={usage?.totals?.today ?? '—'}
+             sub={`${usage?.totals?.total ?? '—'} total 30 hari`} />
+        <Kpi label={t('usage.avg')} value={usage?.totals?.avg_ms ? `${usage.totals.avg_ms} ms` : '—'}
+             sub="rata-rata latensi" />
+        <Kpi label={t('ov.masa') || 'MASA AKTIF'} value={sub ? `${daysLeft} hari` : '—'}
+             tone={expiring ? 'amber' : sub ? 'green' : undefined}
+             sub={sub ? `sampai ${shortDate(sub.expires_at)}` : 'belum aktif'} />
+        <Kpi label={t('usage.total')} value={usage?.totals?.total ?? '—'}
+             sub="request 30 hari terakhir" />
       </div>
 
       {/* aksi cepat */}
@@ -329,7 +333,7 @@ print(resp.choices[0].message.content)`}</pre>
             <tbody>
               {(usage?.recent || []).slice(0, 8).map((r) => (
                 <tr key={r.request_id}>
-                  <td className="mono tiny" data-label="Waktu">{new Date(r.created_at + 'Z').toLocaleTimeString('id-ID')}</td>
+                  <td className="mono tiny" data-label="Waktu">{new Date(r.created_at).toLocaleTimeString('id-ID')}</td>
                   <td className="mono tiny" data-label="Request ID">{r.request_id?.slice(0, 16)}…</td>
                   <td className="mono tiny" data-label="Model">{r.model}</td>
                   <td className="mono tiny" data-label="Latensi">{r.latency_ms ? `${r.latency_ms} ms` : '—'}</td>
@@ -347,12 +351,14 @@ print(resp.choices[0].message.content)`}</pre>
   );
 }
 
-function Kpi({ label, value, tone }) {
+/* sel metrik kompak — dipakai grid .usage-kpis */
+function Kpi({ label, value, tone, sub }) {
   return (
-    <div className="card card-tight">
+    <div className="kpi-cell">
       <div className="tiny-mono">{label}</div>
-      <div className={`mono mt-8 ${tone === 'green' ? 'text-green' : tone === 'amber' ? 'text-amber' : ''}`}
-           style={{ fontSize: 24 }}>{value}</div>
+      <div className={`mono mt-4 ${tone === 'green' ? 'text-green' : tone === 'amber' ? 'text-amber' : tone === 'red' ? 'text-red' : ''}`}
+           style={{ fontSize: 20 }}>{value}</div>
+      {sub && <div className="tiny text-dim mt-4">{sub}</div>}
     </div>
   );
 }
@@ -483,13 +489,13 @@ export function Keys({ user, refresh, config }) {
             <tr>
               <td className="small" data-label="Batas">Request per menit</td>
               <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Nilai">
-                {config?.limits?.user_rpm || 30} RPM
+                {config?.limits?.user_rpm || 40} RPM
               </td>
             </tr>
             <tr>
               <td className="small" data-label="Batas">Request bersamaan</td>
               <td className="mono tiny" style={{ textAlign: 'right' }} data-label="Nilai">
-                {config?.limits?.user_concurrent || 3} concurrent
+                {config?.limits?.user_concurrent || 4} concurrent
               </td>
             </tr>
           </tbody>
@@ -541,6 +547,7 @@ export function Usage() {
   const prev7 = allDaily.slice(-14, -7).reduce((a, b) => a + b.requests, 0);
   const weekDelta = prev7 ? Math.round(((sum7 - prev7) / prev7) * 100) : null;
   const total30 = allDaily.reduce((a, b) => a + b.requests, 0);
+  const empty = total30 === 0;                       // akun belum punya request sama sekali
   const errRate = totals.err_rate ?? 0;
   const successRate = Math.max(0, 100 - errRate).toFixed(1).replace('.', ',');
   const byModel = usage?.byModel || [];
@@ -563,21 +570,22 @@ export function Usage() {
 
       {err && <div className="alert alert-red mb-16">Gagal memuat usage: {err}</div>}
 
-      {/* KPI utama */}
-      <div className="kpi-grid mb-16">
-        <Kpi label="HARI INI" value={fmtNum(totals.today)} tone={totals.today > 0 ? 'green' : undefined} />
+      {/* KPI: kotak rapi, jejer 2 di mobile, 3 di desktop */}
+      <div className="usage-kpis mb-24">
+        <Kpi label="HARI INI" value={fmtNum(totals.today)} tone={totals.today > 0 ? 'green' : undefined}
+             sub={totals.last24 ? `${fmtNum(totals.last24)} / 24 jam` : '—'} />
         <Kpi label="7 HARI TERAKHIR" value={fmtNum(sum7)}
-             tone={weekDelta == null ? undefined : weekDelta >= 0 ? 'green' : 'amber'} />
-        <Kpi label="SUKSES" value={`${successRate}%`}
-             tone={errRate === 0 ? 'green' : errRate > 5 ? 'red' : 'amber'} />
-        <Kpi label="AVG LATENSI" value={totals.avg_ms ? `${fmtNum(totals.avg_ms)} ms` : '—'} />
-      </div>
-
-      <div className="kpi-grid mb-24">
-        <Kpi label="30 HARI" value={fmtNum(total30)} />
-        <Kpi label="PEAK RPM" value={fmtNum(totals.peak_rpm)} />
-        <Kpi label="TOKEN MASUK" value={fmtTok(totals.tokens_in)} />
-        <Kpi label="TOKEN KELUAR" value={fmtTok(totals.tokens_out)} />
+             tone={weekDelta == null ? undefined : weekDelta >= 0 ? 'green' : 'amber'}
+             sub={weekDelta == null ? '—' : `${weekDelta >= 0 ? '▲' : '▼'} ${Math.abs(weekDelta)}% minggu lalu`} />
+        <Kpi label="SUKSES" value={empty ? '—' : `${successRate}%`}
+             tone={empty ? undefined : errRate === 0 ? 'green' : errRate > 5 ? 'red' : 'amber'}
+             sub={empty ? 'belum ada request' : totals.err_count ? `${fmtNum(totals.err_count)} gagal` : 'tanpa error'} />
+        <Kpi label="AVG LATENSI" value={totals.avg_ms ? `${fmtNum(totals.avg_ms)} ms` : '—'}
+             sub={`puncak ${totals.peak_rpm ? fmtNum(totals.peak_rpm) : '—'} RPM`} />
+        <Kpi label="TOKEN IN/OUT" value={`${fmtTok(totals.tokens_in)} / ${fmtTok(totals.tokens_out)}`}
+             sub="30 hari terakhir" />
+        <Kpi label="TOTAL REQUEST" value={fmtNum(total30)}
+             sub="30 hari terakhir" />
       </div>
 
       {/* chart harian dengan error overlay */}
@@ -624,7 +632,7 @@ export function Usage() {
             {byModel.slice(0, 8).map((m) => (
               <div key={m.model}>
                 <div className="row between small">
-                  <span className="mono tiny">{m.model}</span>
+                  <span className="mono tiny">{m.model}{m.errors > 0 && <span className="text-red"> · {m.errors} err</span>}</span>
                   <span className="mono tiny text-muted">
                     {fmtNum(m.requests)}
                     {m.tokens_in != null && ` · ${fmtTok((m.tokens_in || 0) + (m.tokens_out || 0))} tok`}
@@ -655,7 +663,7 @@ export function Usage() {
                   {r.latency_ms ? `${r.latency_ms} ms` : '—'}
                   {(r.tokens_in || r.tokens_out) ? ` · ${fmtTok((r.tokens_in || 0) + (r.tokens_out || 0))} tok` : ''}
                   {' · '}
-                  {new Date(r.created_at + 'Z').toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(r.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ))}
