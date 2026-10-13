@@ -36,7 +36,7 @@ export function Docs({ user, config, models }) {
 
   const Code = ({ id, children, label }) => (
     <div className="card card-flush mt-16">
-      <div className="row between" style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-soft)' }}>
+      <div className="code-head">
         <span className="tiny-mono">{label || 'contoh'}</span>
         <button className="btn btn-ghost btn-sm" onClick={() => copy(children, id)}>
           {copied === id ? '✓ tersalin' : 'copy'}
@@ -224,30 +224,30 @@ CLOVIELA_API_KEY=clv_a1b2c3d4e5f6...
             </thead>
             <tbody>
               <tr>
-                <td className="mono tiny">model</td>
-                <td className="tiny">ya</td>
+                <td className="mono tiny" data-label="Field">model</td>
+                <td className="tiny" data-label="Wajib">ya</td>
                 <td className="tiny text-muted">Nama model dari <span className="mono">/models</span>.</td>
               </tr>
               <tr>
-                <td className="mono tiny">messages</td>
-                <td className="tiny">ya</td>
+                <td className="mono tiny" data-label="Field">messages</td>
+                <td className="tiny" data-label="Wajib">ya</td>
                 <td className="tiny text-muted">
                   Daftar pesan: <span className="mono">role</span> = system / user / assistant.
                 </td>
               </tr>
               <tr>
-                <td className="mono tiny">stream</td>
-                <td className="tiny">tidak</td>
+                <td className="mono tiny" data-label="Field">stream</td>
+                <td className="tiny" data-label="Wajib">tidak</td>
                 <td className="tiny text-muted">Set <span className="mono">true</span> untuk respons bertahap.</td>
               </tr>
               <tr>
-                <td className="mono tiny">temperature</td>
-                <td className="tiny">tidak</td>
+                <td className="mono tiny" data-label="Field">temperature</td>
+                <td className="tiny" data-label="Wajib">tidak</td>
                 <td className="tiny text-muted">0–2. Makin tinggi makin kreatif.</td>
               </tr>
               <tr>
-                <td className="mono tiny">max_tokens</td>
-                <td className="tiny">tidak</td>
+                <td className="mono tiny" data-label="Field">max_tokens</td>
+                <td className="tiny" data-label="Wajib">tidak</td>
                 <td className="tiny text-muted">Batas panjang jawaban.</td>
               </tr>
             </tbody>
@@ -461,14 +461,14 @@ curl ${base}/chat/completions \\
             <tbody>
               {models.map((m) => (
                 <tr key={m.id}>
-                  <td className="mono tiny">
+                  <td className="mono tiny" data-label="Model">
                     {m.id}
                     <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }}
                             onClick={() => copy(m.id, m.id)}>
                       {copied === m.id ? '✓' : 'copy'}
                     </button>
                   </td>
-                  <td className="tiny text-muted">{m.description || m.label}</td>
+                  <td className="tiny text-muted" data-label="Ket.">{m.description || m.label}</td>
                 </tr>
               ))}
               {!models.length && (
@@ -531,13 +531,13 @@ curl ${base}/chat/completions \\
           <table className="table mt-16">
             <thead><tr><th>Header</th><th>Keterangan</th></tr></thead>
             <tbody>
-              <tr><td className="mono tiny">Retry-After</td>
+              <tr><td className="mono tiny" data-label="Header">Retry-After</td>
                   <td className="tiny text-muted">Detik yang perlu ditunggu sebelum mencoba lagi.</td></tr>
-              <tr><td className="mono tiny">X-RateLimit-Limit</td>
+              <tr><td className="mono tiny" data-label="Header">X-RateLimit-Limit</td>
                   <td className="tiny text-muted">Batas yang berlaku.</td></tr>
-              <tr><td className="mono tiny">X-RateLimit-Remaining</td>
+              <tr><td className="mono tiny" data-label="Header">X-RateLimit-Remaining</td>
                   <td className="tiny text-muted">Sisa kuota di jendela saat ini.</td></tr>
-              <tr><td className="mono tiny">X-RateLimit-Scope</td>
+              <tr><td className="mono tiny" data-label="Header">X-RateLimit-Scope</td>
                   <td className="tiny text-muted"><span className="mono">user</span> atau <span className="mono">global</span>.</td></tr>
             </tbody>
           </table>
@@ -613,48 +613,48 @@ def tanya(prompt, percobaan=4):
             <thead><tr><th>Status</th><th>Code</th><th>Artinya</th><th>Solusi</th></tr></thead>
             <tbody>
               <tr>
-                <td className="mono tiny">401</td>
-                <td className="mono tiny">missing_key</td>
-                <td className="tiny">Header Authorization tidak ada</td>
-                <td className="tiny text-muted">Tambahkan <span className="mono">Bearer &lt;key&gt;</span></td>
+                <td className="mono tiny" data-label="Status">401</td>
+                <td className="mono tiny" data-label="Code">missing_key</td>
+                <td className="tiny" data-label="Artinya">Header Authorization tidak ada</td>
+                <td className="tiny text-muted" data-label="Solusi">Tambahkan <span className="mono">Bearer &lt;key&gt;</span></td>
               </tr>
               <tr>
-                <td className="mono tiny">401</td>
-                <td className="mono tiny">invalid_key</td>
-                <td className="tiny">Key salah / sudah di-revoke</td>
-                <td className="tiny text-muted">Ambil key baru di dashboard</td>
+                <td className="mono tiny" data-label="Status">401</td>
+                <td className="mono tiny" data-label="Code">invalid_key</td>
+                <td className="tiny" data-label="Artinya">Key salah / sudah di-revoke</td>
+                <td className="tiny text-muted" data-label="Solusi">Ambil key baru di dashboard</td>
               </tr>
               <tr>
                 <td className="mono tiny">402</td>
-                <td className="mono tiny">subscription_inactive</td>
-                <td className="tiny">Langganan habis / belum bayar</td>
-                <td className="tiny text-muted">Perpanjang paket</td>
+                <td className="mono tiny" data-label="Code">subscription_inactive</td>
+                <td className="tiny" data-label="Artinya">Langganan habis / belum bayar</td>
+                <td className="tiny text-muted" data-label="Solusi">Perpanjang paket</td>
               </tr>
               <tr>
                 <td className="mono tiny">404</td>
-                <td className="mono tiny">model_not_found</td>
-                <td className="tiny">Nama model tidak dikenal</td>
-                <td className="tiny text-muted">Cek <span className="mono">/models</span></td>
+                <td className="mono tiny" data-label="Code">model_not_found</td>
+                <td className="tiny" data-label="Artinya">Nama model tidak dikenal</td>
+                <td className="tiny text-muted" data-label="Solusi">Cek <span className="mono">/models</span></td>
               </tr>
               <tr>
                 <td className="mono tiny">429</td>
-                <td className="mono tiny">rate_limit</td>
-                <td className="tiny">Melebihi kuota per menit</td>
-                <td className="tiny text-muted">
+                <td className="mono tiny" data-label="Code">rate_limit</td>
+                <td className="tiny" data-label="Artinya">Melebihi kuota per menit</td>
+                <td className="tiny text-muted" data-label="Solusi">
                   Tunggu sesuai <span className="mono">Retry-After</span> → lihat tab Rate limit
                 </td>
               </tr>
               <tr>
                 <td className="mono tiny">429</td>
-                <td className="mono tiny">concurrency_limit</td>
-                <td className="tiny">Terlalu banyak request bersamaan</td>
-                <td className="tiny text-muted">Tunggu salah satu selesai, lalu ulangi</td>
+                <td className="mono tiny" data-label="Code">concurrency_limit</td>
+                <td className="tiny" data-label="Artinya">Terlalu banyak request bersamaan</td>
+                <td className="tiny text-muted" data-label="Solusi">Tunggu salah satu selesai, lalu ulangi</td>
               </tr>
               <tr>
                 <td className="mono tiny">502</td>
-                <td className="mono tiny">upstream_unreachable</td>
-                <td className="tiny">Provider sedang bermasalah</td>
-                <td className="tiny text-muted">Coba lagi; kalau terus, lapor admin</td>
+                <td className="mono tiny" data-label="Code">upstream_unreachable</td>
+                <td className="tiny" data-label="Artinya">Provider sedang bermasalah</td>
+                <td className="tiny text-muted" data-label="Solusi">Coba lagi; kalau terus, lapor admin</td>
               </tr>
             </tbody>
           </table>

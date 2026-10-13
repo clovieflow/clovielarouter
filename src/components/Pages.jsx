@@ -151,7 +151,7 @@ export function Landing({ user, config, models }) {
       {/* quickstart */}
       <section className="shell mt-32">
         <div className="card card-flush">
-          <div className="row between" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-soft)' }}>
+          <div className="code-head">
             <span className="tiny-mono">quickstart.sh</span>
             <span className="tiny-mono">copy</span>
           </div>

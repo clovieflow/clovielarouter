@@ -287,6 +287,7 @@ app.post(
       reference,
       user_id: req.user.uid,
       subscription_id: sub.id,
+      days: PLAN_DAYS,            // dibekukan saat order dibuat — harga & masa aktif sepakat di sini
       coin,
       symbol: amount.symbol,
       amount: amount.amount,
@@ -370,15 +371,16 @@ async function checkCryptoOrder(order) {
     return order;
   }
 
-  await store.updateCryptoOrder(order.reference, {
+  // klaim atomik: hanya satu pemanggil (cron ATAU polling) yang menang,
+  // jadi aktifasi + mint key + notif tidak pernah dobel.
+  const claimed = await store.claimCryptoPaid(order.reference, {
     status: 'paid',
     signature: verdict.signature,
     received: verdict.received,
-    paid_at: new Date().toISOString(),
   });
+  if (!claimed) return { ...order, status: 'paid', signature: order.signature || verdict.signature };
 
-  const subSnap = await db.collection(C.subscriptions(order.user_id)).doc(order.subscription_id).get();
-  const days = subSnap.exists ? subSnap.data().days : PLAN_DAYS;
+  const days = order.days || PLAN_DAYS;
   await store.activateSubscription(order.user_id, order.subscription_id, days);
 
   const key = await store.activeKey(order.user_id);

@@ -645,10 +645,11 @@ export async function saveSettings(name, data) {
  * dicari lewat `reference` (yang ada di QR) tanpa tahu uid pemiliknya.
  */
 export async function createCryptoOrder(data) {
-  const ref = db.collection(C.cryptoOrders).doc();
-  const doc = { id: ref.id, ...data, created_at: now() };
+  // reference JUGA dipakai sebagai doc ID — lookup langsung O(1) tanpa query.
+  const ref = db.collection(C.cryptoOrders).doc(data.reference);
+  const doc = { ...data, created_at: now() };
   await ref.set(doc);
-  return { ...doc, created_at: new Date().toISOString() };
+  return { ...doc, id: data.reference, created_at: new Date().toISOString() };
 }
 
 export async function cryptoOrderByRef(reference) {
@@ -658,6 +659,23 @@ export async function cryptoOrderByRef(reference) {
 
 export async function updateCryptoOrder(reference, patch) {
   await db.collection(C.cryptoOrders).doc(reference).set(patch, { merge: true });
+}
+
+/**
+ * Tandai order lunas SECARA ATOMIK: hanya satu pemanggil (cron vs polling)
+ * yang berhasil membalik status 'pending' -> 'paid'. Yang kalah mendapat null,
+ * jadi tidak pernah ada key dobel / notifikasi dobel.
+ * @returns order terbaru kalau menang, null kalau sudah diklaim pihak lain.
+ */
+export function claimCryptoPaid(reference, patch) {
+  const ref = db.collection(C.cryptoOrders).doc(reference);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    if (snap.data().status !== 'pending') return null;
+    tx.update(ref, { ...patch, paid_at: new Date().toISOString() });
+    return { ...snap.data(), ...patch };
+  });
 }
 
 export async function listCryptoOrders(uid, limit = 50) {

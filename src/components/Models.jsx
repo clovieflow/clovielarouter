@@ -326,7 +326,7 @@ export function Logs() {
 
       {/* paginasi */}
       {data && data.filtered > limit && (
-        <div className="row between mt-16">
+        <div className="row between wrap gap-12 mt-16">
           <button className="btn btn-sm" disabled={offset === 0}
                   onClick={() => { const o = Math.max(0, offset - limit); setOffset(o); load({ offset: o }); }}>
             ← sebelumnya

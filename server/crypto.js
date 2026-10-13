@@ -64,7 +64,10 @@ export async function rates() {
     const idr = json?.[c.cg]?.idr;
     if (idr) out[c.code] = Number(idr);
   }
-  if (!Object.keys(out).length) throw new Error('rate_kosong');
+  // all-or-nothing: kurs parsial tidak boleh di-cache — kalau usd-coin/tether
+  // hilang dari respons, USDC/USDT bakal gagal 5 menit sementara SOL jalan.
+  const missing = Object.keys(COINS).filter((k) => !out[k]);
+  if (missing.length) throw new Error(`rate_kurang:${missing.join(',')}`);
 
   rateCache = { at: Date.now(), data: out };
   return out;
@@ -180,7 +183,7 @@ export async function verifyPayment(order) {
       ? splReceived(tx, order.address, c.mint)
       : solReceived(tx, order.address);
 
-    if (received >= order.amount * 0.99) {
+    if (received >= order.amount * 0.995) {  // toleransi 0.5% untuk fee/drift kurs
       return { paid: true, signature: s.signature, received };
     }
   }
