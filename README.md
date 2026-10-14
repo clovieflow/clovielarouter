@@ -265,9 +265,22 @@ npm run db:rebuild -- --apply   # tiap transaksi `paid` = +PLAN_DAYS hari, ditum
 ```
 
 Baris hasil rekonstruksi ditandai `provisional: true` + id berawalan `prov_`,
-sehingga impor Firestore berikutnya otomatis membuangnya dan memakai data asli.
-Satu perintah untuk semuanya (tunggu kuota → ekspor → impor → isi celah):
-`bash scripts/import-when-ready.sh`.
+sehingga impor Firestore (kalau dijalankan) otomatis membuangnya dan memakai
+data asli.
+
+**Impor TIDAK berjalan otomatis.** Data Firestore lama dibiarkan apa adanya;
+produksi memakai data yang ada di SQLite sekarang. Kalau suatu saat mau
+memasukkan data lama, jalankan manual dan cek dulu pratinjaunya:
+
+```bash
+npm run db:export -- --watch                  # tunggu kuota Firestore pulih
+npm run db:import -- firestore-export.json --dry   # pratinjau: lihat yang ditimpa
+npm run db:import -- firestore-export.json         # tulis sungguhan
+```
+
+Konsekuensi tidak impor: **API key lama tidak kembali** (yang tersimpan di
+Firestore hanya hash-nya). User tinggal buka Dashboard → API Keys →
+**Terbitkan key** (butuh langganan aktif) dan langsung dapat key baru.
 
 ---
 

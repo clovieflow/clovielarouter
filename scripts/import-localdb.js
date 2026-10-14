@@ -1,7 +1,10 @@
 /**
  * Impor hasil `scripts/export-firestore.js` ke SQLite (server/localdb.js).
  *
- *   node scripts/import-localdb.js firestore-export.json [DB_PATH]
+ *   node scripts/import-localdb.js firestore-export.json [DB_PATH] [--dry]
+ *
+ *   --dry  pratinjau saja: hitung dokumen baru vs yang akan diganti,
+ *          tanpa menulis apa pun ke database.
  *
  * Aturan tulis:
  *   - upsert per dokumen (coll,id) — data yang dibuat setelah pindah ke
@@ -14,8 +17,10 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { openLocalDb } from '../server/localdb.js';
 
-const file = process.argv[2] || 'firestore-export.json';
-const dbPath = process.argv[3] || process.env.DB_PATH || 'data/cloviela.db';
+const args = process.argv.slice(2).filter((a) => a !== '--dry');
+const DRY = process.argv.includes('--dry');
+const file = args[0] || 'firestore-export.json';
+const dbPath = args[1] || process.env.DB_PATH || 'data/cloviela.db';
 
 if (!existsSync(file)) {
   console.error(`✗ file ekspor tidak ada: ${file}`);
@@ -41,23 +46,38 @@ const dropDanglingIndex = sqlite.prepare(`
      )
 `);
 
+const exists = sqlite.prepare('SELECT 1 FROM docs WHERE coll = ? AND id = ?');
 let total = 0;
+let replaced = 0;
 let dropped = 0;
+
 const importAll = sqlite.transaction(() => {
   for (const [coll, rows] of Object.entries(dump.collections || {})) {
-    const gone = dropProvisional.run(coll).changes; // buang hasil rekonstruksi utk koleksi ini
+    const gone = DRY ? 0 : dropProvisional.run(coll).changes; // buang hasil rekonstruksi utk koleksi ini
     dropped += gone;
     let n = 0;
+    let rep = 0;
     for (const row of rows) {
-      put.run(coll, String(row.id), JSON.stringify(row.data ?? {}));
+      const id = String(row.id);
+      if (exists.get(coll, id)) rep++;
+      if (!DRY) put.run(coll, id, JSON.stringify(row.data ?? {}));
       n++;
       total++;
     }
-    console.log(`  ${coll}: ${n}${gone ? ` (+${gone} provisional dibuang)` : ''}`);
+    replaced += rep;
+    console.log(`  ${coll}: ${n}${rep ? ` (${rep} menimpa yang sudah ada)` : ''}${gone ? ` (+${gone} provisional dibuang)` : ''}`);
   }
-  const dangling = dropDanglingIndex.run().changes;
-  if (dangling) console.log(`  index yatim dibersihkan: ${dangling}`);
+  if (!DRY) {
+    const dangling = dropDanglingIndex.run().changes;
+    if (dangling) console.log(`  index yatim dibersihkan: ${dangling}`);
+  }
 });
 importAll();
+
+if (DRY) {
+  console.log(`\n[pratinjau] ${total} dokumen akan diimpor, ${replaced} di antaranya menimpa data sekarang, ${dropped} provisional dibuang.`);
+  console.log('Tidak ada yang ditulis. Jalankan tanpa --dry kalau sudah yakin.');
+  process.exit(0);
+}
 
 console.log(`✓ impor selesai → ${dbPath} (${total} dokumen, ekspor dari ${dump.exported_at})`);
