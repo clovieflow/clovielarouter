@@ -122,6 +122,7 @@ membakar kuota seperti listener Firestore dulu.
 | `FIREBASE_SERVICE_ACCOUNT_PATH` | `secrets/firebase-service-account.json` (gitignored) |
 | `DB_BACKEND` | `local` (default) — SQLite; `firestore` hanya untuk ekspor data lama |
 | `DB_PATH` | `data/cloviela.db` (relatif cwd; di VPS: `/opt/cloviela/data/cloviela.db`) |
+| `BODY_LIMIT` | batas body request JSON (default `100mb`) |
 | `PAYMENKU_API_KEY` | `sk_live_…` dari dashboard Paymenku |
 | `PAYMENKU_WEBHOOK_SECRET` | Settings → Webhook |
 | `ADMIN_EMAILS` | email Google kamu — hanya ini yang bisa buka `/admin` |
@@ -222,6 +223,20 @@ Hasil tes disimpan (`last_test`) sehingga dashboard admin selalu menampilkan
 kartu **MODEL SEHAT / BERMASALAH** tanpa perlu tes ulang.
 
 ---
+
+### Batas ukuran request (penting saat ada 413)
+
+Ukuran body dibatasi **berlapis** — semua harus dinaikkan bersamaan:
+
+| Lapis | Berkas | Nilai sekarang |
+|---|---|---|
+| Cloudflare (edge) | dashboard Cloudflare | 100 MB (batas plan gratis — plafon sebenarnya) |
+| nginx (VPS) | `deploy/nginx-cloviela.conf` → `/etc/nginx/sites-available/cloviela` | `client_max_body_size 100m` |
+| Express | `BODY_LIMIT` di `.env` | `100mb` |
+
+Gejala kalau salah satu lebih kecil: client dapat **413** — kalau halaman HTML
+(i.e. `413 Request Entity Too Large` bergaya nginx) berarti dari proxy; kalau
+JSON `{"code":"payload_too_large"}` berarti dari Express.
 
 ## 6. Struktur data (SQLite)
 
