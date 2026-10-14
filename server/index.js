@@ -30,7 +30,14 @@ const API_BASE = (process.env.PUBLIC_API_BASE || `${APP_URL}/v1`).replace(/\/+$/
 
 // raw body untuk webhook (signature dihitung dari raw body)
 app.use('/api/webhook/paymenku', express.raw({ type: '*/*', limit: '1mb' }));
-app.use(express.json({ limit: '4mb' }));
+/**
+ * Batas body JSON. Default 100mb = setinggi yang masih masuk akal untuk
+ * router LLM (prompt panjang, gambar base64). Bisa diubah dari .env
+ * (BODY_LIMIT) tanpa menyentuh kode. Ingat: body di-buffer di memori, jadi
+ * N request besar bersamaan ≈ N × ukuran body — kecilkan kalau RAM mepet.
+ */
+const BODY_LIMIT = process.env.BODY_LIMIT || '100mb';
+app.use(express.json({ limit: BODY_LIMIT }));
 app.use(cookieParser());
 
 // Semua endpoint dinamis: jangan di-cache browser/proxy.
@@ -1419,7 +1426,9 @@ if (process.env.NODE_ENV === 'production') {
 app.use((err, _req, res, _next) => {
   console.error('[error]', err);
   if (err?.type === 'entity.too.large') {
-    return res.status(413).json({ error: { message: 'Data terlalu besar (maks 4 MB).', code: 'payload_too_large' } });
+    return res
+      .status(413)
+      .json({ error: { message: `Data terlalu besar (maks ${BODY_LIMIT}).`, code: 'payload_too_large' } });
   }
   res.status(500).json({ error: { message: 'Server error.', code: 'internal' } });
 });
