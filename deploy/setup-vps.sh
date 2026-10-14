@@ -6,7 +6,7 @@
 #   bash deploy/setup-vps.sh
 #
 # Yang dilakukan:
-#   1. cek Node.js >= 20
+#   1. cek Node.js >= 22 (better-sqlite3 butuh >= 22)
 #   2. install dependency produksi
 #   3. build frontend (Vite → dist/)
 #   4. pasang systemd service + jalankan
@@ -27,11 +27,11 @@ cd "$APP_DIR"
 say "Cek Node.js"
 if ! command -v node >/dev/null 2>&1; then
   die "Node.js belum terpasang. Install dulu:
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+    curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
     sudo apt-get install -y nodejs"
 fi
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 20 ] || die "Node.js v$NODE_MAJOR terlalu tua — butuh >= 20 (node:sqlite/Firestore)."
+[ "$NODE_MAJOR" -ge 22 ] || die "Node.js v$NODE_MAJOR terlalu tua — butuh >= 22 (better-sqlite3)."
 echo "  node $(node -v) · npm $(npm -v)"
 
 # ── 2. .env ───────────────────────────────────────────────────

@@ -46,7 +46,7 @@ export function useAuth(config) {
       setToken(idToken);
       try {
         setTokenProvider(async () => idToken);
-        await api.syncUser();       // pastikan dokumen user ada di Firestore
+        await api.syncUser();       // pastikan baris user ada di database server
         const { user } = await api.me();
         if (!cancelled) setUser(user);
       } catch (e) {

@@ -1,8 +1,9 @@
 /**
- * End-to-end test dengan Firestore + Firebase Auth (tanpa browser).
+ * End-to-end test dengan SQLite + Firebase Auth (tanpa browser).
  *
- * Membuat user Firebase sungguhan (email dummy), lalu:
- *   1. provider & model mock di Firestore
+ * Membuat user Firebase Auth sungguhan (email dummy) — data (provider,
+ * model, langganan, key) masuk ke SQLite lokal. Lalu:
+ *   1. provider & model mock
  *   2. langganan aktif + API key
  *   3. /v1/models, /v1/chat/completions (stream & non-stream)
  *   4. validasi error (key salah, model tidak ada, tanpa key)

@@ -3,8 +3,10 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 
 /**
  * Firebase — project: cloviela1
- * Google Sign-In (Firebase Auth) + Cloud Firestore.
+ * Google Sign-In (Firebase Auth) saja.
  *
+ * Data (langganan, pembayaran, key) TIDAK diambil dari Firestore lagi —
+ * semua lewat API server sendiri (/api/*) yang menyimpan di SQLite.
  * Config datang dari server (/api/config) supaya tidak perlu rebuild
  * saat pindah environment; fallback ke app project cloviela1.
  */
@@ -60,57 +62,4 @@ export function watchAuth(config, onChange) {
       photo: user.photoURL,
     });
   });
-}
-
-/**
- * Firestore — di-load LAZY (dynamic import) supaya bundle awal tetap ringan.
- * Dipakai untuk realtime listener status pembayaran & langganan.
- */
-let _dbPromise = null;
-export function getFirestoreDb(config) {
-  if (!_dbPromise) {
-    _dbPromise = import('firebase/firestore').then((m) =>
-      m.getFirestore(initFirebase(config))
-    );
-  }
-  return _dbPromise;
-}
-
-/**
- * Dengarkan dokumen pembayaran secara realtime.
- * @returns unsubscribe function
- */
-export async function watchPayment(config, uid, paymentId, cb) {
-  const [fs, db] = await Promise.all([import('firebase/firestore'), getFirestoreDb(config)]);
-  const ref = fs.doc(db, 'users', uid, 'payments', paymentId);
-  return fs.onSnapshot(
-    ref,
-    (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null),
-    (err) => console.warn('[firestore]', err.message)
-  );
-}
-
-/** Dengarkan langganan aktif (dipakai banner masa aktif di dashboard). */
-export async function watchActiveSubscription(config, uid, cb) {
-  const [fs, db] = await Promise.all([import('firebase/firestore'), getFirestoreDb(config)]);
-  const q = fs.query(
-    fs.collection(db, 'users', uid, 'subscriptions'),
-    fs.where('status', '==', 'active'),
-    fs.orderBy('expires_at', 'desc'),
-    fs.limit(1)
-  );
-  return fs.onSnapshot(
-    q,
-    (snap) => {
-      if (snap.empty) return cb(null);
-      const d = snap.docs[0];
-      const data = d.data();
-      cb({
-        id: d.id,
-        ...data,
-        expires_at: data.expires_at?.toDate?.().toISOString?.() ?? null,
-      });
-    },
-    (err) => console.warn('[firestore]', err.message)
-  );
 }

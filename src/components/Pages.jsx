@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { api, rupiah } from '../api';
 import { navigate } from '../hooks';
 import { t, setLang, getLang } from '../lang';
-import { watchPayment } from '../firebase';
 import { GoogleButton, Avatar } from './Auth';
 import { LogoMark } from './Logo';
 
@@ -377,7 +376,7 @@ export function CheckoutPage({ user, config, onLogin, refresh, busy, error: auth
   }
 
   if (payment) {
-    return <PaymentPending payment={payment} refresh={refresh} config={config} user={user} />;
+    return <PaymentPending payment={payment} refresh={refresh} />;
   }
 
   if (order) {
@@ -613,31 +612,23 @@ function CryptoPending({ order, refresh, config, user }) {
 
 /* ── Payment pending / QR ────────────────────────── */
 
-function PaymentPending({ payment, refresh, config, user }) {
+function PaymentPending({ payment, refresh }) {
   const [status, setStatus] = useState(payment.status);
   const [copied, setCopied] = useState('');
 
-  // 1) realtime dari Firestore (instan begitu webhook masuk)
-  useEffect(() => {
-    if (!config || !user?.id || !payment.id) return;
-    let unsub = () => {};
-    let alive = true;
-    watchPayment(config, user.id, payment.id, (doc) => {
-      if (!alive || !doc) return;
-      if (doc.status && doc.status !== 'pending') setStatus(doc.status);
-    }).then((u) => { if (alive) unsub = u; else u?.(); });
-    return () => { alive = false; unsub?.(); };
-  }, [config, user?.id, payment.id]);
-
-  // 2) fallback polling server (kalau Firestore diblokir/offline)
+  // Cek status pembayaran lewat API server (data di SQLite sendiri).
+  // Dulu ada listener Firestore untuk update instan; sekarang polling ini
+  // satu-satunya jalur — 5 detik cukup cepat, dan tidak membakar kuota.
   useEffect(() => {
     if (status !== 'pending') return;
-    const t = setInterval(async () => {
+    const tick = async () => {
       try {
         const { payment: p } = await api.payment(payment.reference_id);
         if (p.status !== 'pending') setStatus(p.status);
-      } catch { /* diamkan */ }
-    }, 6000);
+      } catch { /* diamkan: coba lagi tick berikutnya */ }
+    };
+    const t = setInterval(tick, 5000);
+    tick();
     return () => clearInterval(t);
   }, [status, payment.reference_id]);
 

@@ -1,5 +1,5 @@
 /**
- * Seed contoh: 1 provider custom + 2 model di Firestore.
+ * Seed contoh: 1 provider custom + 2 model (masuk ke SQLite lokal).
  * Jalankan: node scripts/seed.js
  *
  * Provider & model TIDAK di-hardcode — ini cuma contoh awal.

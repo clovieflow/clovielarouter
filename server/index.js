@@ -3,9 +3,9 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
-import { auth, iso, Timestamp, db, C } from './firebase.js';
+import { auth, iso, Timestamp, db, C, backend, projectId } from './firebase.js';
 import * as store from './store.js';
 import * as paymenku from './paymenku.js';
 import * as crypto from './crypto.js';
@@ -93,8 +93,8 @@ const adminChain = [attachUser, requireAdmin];
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
-    backend: 'firestore',
-    project: process.env.FIREBASE_PROJECT_ID || 'cloviela1',
+    backend,
+    store: backend === 'local' ? resolve(process.env.DB_PATH || 'data/cloviela.db') : projectId,
     payment: paymenku.paymenkuEnabled() ? paymenku.paymenkuMode() : 'disabled',
     telegram: !!process.env.TELEGRAM_BOT_TOKEN,
     price_idr: PRICE_IDR,
@@ -1439,7 +1439,12 @@ setInterval(() => {
 
 app.listen(PORT, () => {
   console.log(`▸ cloviela api   http://localhost:${PORT}`);
-  console.log(`▸ backend        Firestore (${process.env.FIREBASE_PROJECT_ID || 'cloviela1'})`);
+  console.log(`▸ auth           Firebase (${projectId})`);
+  console.log(
+    backend === 'local'
+      ? `▸ data           SQLite (${resolve(process.env.DB_PATH || 'data/cloviela.db')})`
+      : `▸ data           Firestore (${projectId}) — legacy`
+  );
   console.log(`▸ payment        ${paymenku.paymenkuEnabled() ? paymenku.paymenkuMode() : 'disabled'}`);
   console.log(`▸ telegram admin ${process.env.TELEGRAM_BOT_TOKEN ? 'on' : 'off'}`);
 });

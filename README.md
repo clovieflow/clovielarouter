@@ -1,44 +1,46 @@
 # Cloviela — Router AI
 
 Website + backend layanan **router AI unlimited** (Rp15.000 / 7 hari).
-Login user pakai **Google (Firebase Auth)**, database **Cloud Firestore**,
-pembayaran otomatis lewat **Paymenku (QRIS)**, notifikasi pembelian masuk ke
-**Telegram admin** — user tidak perlu chat, semua di web.
+Login user pakai **Google (Firebase Auth)**, semua **data di SQLite dalam VPS**
+(lihat `server/localdb.js`), pembayaran otomatis lewat **Paymenku (QRIS)**,
+notifikasi pembelian masuk ke **Telegram admin** — user tidak perlu chat,
+semua di web.
 
 ```
-VPS (1 server)  →  Express: serve React build + /api + /v1 + webhook Paymenku
-Firebase        →  Auth (Google Sign-In) + Firestore (database)   ← gratis
+VPS (1 server)  →  Express: React build + /api + /v1 + webhook + SQLite
+Firebase        →  Auth (Google Sign-In) saja
 ```
 
 Kenapa begitu? Project `cloviela1` belum pakai plan Blaze, jadi Cloud Functions
-belum tersedia. Dengan Express di VPS, kamu tidak perlu billing Firebase sama
-sekali dan hanya ada satu tempat untuk di-deploy.
+belum tersedia. Dulu data ada di Firestore, tapi kuota hariannya (Spark: 50k
+baca/hari) gampang jebol oleh polling status pembayaran — begitu jebol, semua
+baca mati sampai tengah malam PT. Sekarang data pindah ke SQLite di VPS:
+tanpa kuota, tanpa biaya, dan satu file untuk di-backup.
 
 ---
 
 ## Isi repo
 
 ```
-server/                 # Express API + Firestore
+server/                 # Express API + SQLite
 ├── index.js            # route: auth, checkout, webhook, /v1 proxy, admin
-├── firebase.js         # Firebase Admin SDK (Auth + Firestore) — project cloviela1
-├── store.js            # data layer Firestore (users, subs, payments, keys, usage)
+├── firebase.js         # Firebase Admin SDK — Auth saja (+ saklar DB_BACKEND)
+├── localdb.js          # backend data SQLite (API ala Firestore) — lihat di bawah
+├── store.js            # data layer (users, subs, payments, keys, usage)
 ├── paymenku.js         # create transaction, check status, verifikasi webhook HMAC
 ├── telegram.js         # notifikasi admin
 src/                    # React (Vite) — landing, checkout, dashboard, admin
 scripts/                # seed, smoke test, mock upstream & mock Paymenku
 deploy/                 # systemd service, Caddyfile, setup-vps.sh
-firestore.rules         # security rules (sudah dideploy)
-firestore.indexes.json  # composite indexes (sudah dideploy)
-firebase.json           # config Firebase (auth provider + firestore)
+firebase.json           # config Firebase (provider Google Sign-In)
+data/cloviela.db        # database SQLite (gitignored) — data runtime
 ```
 
 **Firebase yang sudah disiapkan** (project `cloviela1`, region Jakarta):
 - Web app terdaftar: `cloviela web` (`1:513134013669:web:7d9dd2652bf20ef153f80c`)
 - Google Sign-In aktif (authorized: `localhost`, `router.cloviela.my.id`)
-- Firestore database `(default)` — lokasi `asia-southeast2`
-- Security rules + indexes ter-deploy
 - Service account untuk server: `secrets/firebase-service-account.json` (gitignored)
+- Firestore TIDAK dipakai lagi (data lama bisa diekspor dengan `npm run db:export`)
 
 **Admin**: email di `ADMIN_EMAILS` (sekarang `clovvalencied@gmail.com`) otomatis
 dapat role `admin` saat pertama login Google.
@@ -46,9 +48,9 @@ dapat role `admin` saat pertama login Google.
 ### Cek cepat semuanya jalan
 
 ```bash
-npm run smoke        # Firebase Auth → langganan → /v1 chat + stream
+npm run selftest     # data layer (statement SQLite) — tanpa Firebase, tanpa server
+npm run smoke        # Firebase Auth → langganan → /v1 chat + stream (server harus hidup)
 npm run test:webhook # signature webhook + aktivasi otomatis + idempotensi
-npm run test:rules   # security rules (PII, eskalasi role, api_keys tertutup)
 ```
 
 ---
@@ -106,9 +108,9 @@ user klik Beli
   → halaman bayar auto-pindah → dashboard, key langsung tampil
 ```
 
-Status pembayaran di halaman bayar memakai **realtime listener Firestore**
-(`users/{uid}/payments/{id}`) — begitu webhook menulis `paid`, UI langsung
-berubah tanpa polling. Polling server tetap ada sebagai fallback.
+Status pembayaran di halaman bayar memakai **polling ke API sendiri**
+(`GET /api/payments/{reference_id}`, tiap 5 detik) — cukup cepat, dan tidak
+membakar kuota seperti listener Firestore dulu.
 
 ---
 
@@ -118,6 +120,8 @@ berubah tanpa polling. Polling server tetap ada sebagai fallback.
 |---|---|
 | `FIREBASE_*` | sudah terisi untuk project `cloviela1` |
 | `FIREBASE_SERVICE_ACCOUNT_PATH` | `secrets/firebase-service-account.json` (gitignored) |
+| `DB_BACKEND` | `local` (default) — SQLite; `firestore` hanya untuk ekspor data lama |
+| `DB_PATH` | `data/cloviela.db` (relatif cwd; di VPS: `/opt/cloviela/data/cloviela.db`) |
 | `PAYMENKU_API_KEY` | `sk_live_…` dari dashboard Paymenku |
 | `PAYMENKU_WEBHOOK_SECRET` | Settings → Webhook |
 | `ADMIN_EMAILS` | email Google kamu — hanya ini yang bisa buka `/admin` |
@@ -144,7 +148,7 @@ Untuk production pakai `.env.production.example` sebagai acuan.
 ### User (butuh Firebase ID token: `Authorization: Bearer <idToken>`)
 | Method | Path | Keterangan |
 |---|---|---|
-| POST | `/api/auth/sync` | pastikan dokumen user ada di Firestore |
+| POST | `/api/auth/sync` | pastikan baris user ada di database (SQLite) |
 | GET | `/api/me` | profil + langganan + key aktif |
 | GET | `/api/channels` | channel pembayaran (QRIS) |
 | POST | `/api/checkout` | buat transaksi |
@@ -219,21 +223,37 @@ kartu **MODEL SEHAT / BERMASALAH** tanpa perlu tes ulang.
 
 ---
 
-## 6. Struktur Firestore
+## 6. Struktur data (SQLite)
+
+Semua di satu file `data/cloviela.db` (tabel `docs(coll, id, data)`), id dan
+path koleksi tetap sama seperti dulu di Firestore:
 
 ```
 users/{uid}                          profil (email, name, photo, role)
 users/{uid}/subscriptions/{id}       langganan
 users/{uid}/payments/{id}            pembayaran
-api_keys/{keyId}                     key (hash + prefix) — tidak bisa dibaca client
+api_keys/{keyId}                     key (hash + prefix)
 usage_logs/{autoId}                  log request
-providers/{id}, models/{modelId}     konfigurasi (models boleh dibaca publik)
+providers/{id}, models/{modelId}     konfigurasi
 trx_index, ref_index                 lookup webhook (internal)
 webhook_events/{trxId}               idempotensi webhook
+settings/{nama}                      mis. `crypto` (alamat wallet admin)
+crypto_orders/{reference}            order crypto
 ```
 
-Security rules: default **deny**, PII hanya owner, `role` tidak bisa diubah user,
-`api_keys` sama sekali tertutup untuk client (dilayani endpoint `/api/me`).
+`server/localdb.js` menyediakan API ala Firestore di atas SQLite
+(`collection().doc().get()/set()/update()/create()/delete()`, `where('==')`,
+`orderBy`, `limit`, `collectionGroup`, `batch`, `runTransaction`) — store.js
+tidak perlu tahu bedanya. Backup = cukup salin file `data/cloviela.db`.
+Client (browser) tidak pernah menyentuh database langsung: semua lewat
+`/api/*` yang otorisasinya di server.
+
+**Migrasi dari Firestore lama** (kuota Firestore reset tengah malam PT):
+
+```bash
+npm run db:export                 # tulis firestore-export.json (firestore, --watch untuk tunggu kuota)
+npm run db:import firestore-export.json   # upsert ke data/cloviela.db
+```
 
 ---
 
