@@ -251,9 +251,23 @@ Client (browser) tidak pernah menyentuh database langsung: semua lewat
 **Migrasi dari Firestore lama** (kuota Firestore reset tengah malam PT):
 
 ```bash
-npm run db:export                 # tulis firestore-export.json (firestore, --watch untuk tunggu kuota)
-npm run db:import firestore-export.json   # upsert ke data/cloviela.db
+npm run db:export                          # tulis firestore-export.json (--watch = tunggu kuota pulih)
+npm run db:import firestore-export.json    # upsert ke data/cloviela.db (buang baris `provisional`)
+npm run db:rebuild                          # opsional: bangun langganan dari riwayat Paymenku
 ```
+
+Kalau Firestore sedang tidak bisa dibaca (kuota habis), langganan user masih
+bisa dibangun ulang dari **riwayat transaksi Paymenku** (endpoint
+`GET /transactions` menyimpan `customer_email` + `paid_at`):
+
+```bash
+npm run db:rebuild -- --apply   # tiap transaksi `paid` = +PLAN_DAYS hari, ditumpuk dari paid_at
+```
+
+Baris hasil rekonstruksi ditandai `provisional: true` + id berawalan `prov_`,
+sehingga impor Firestore berikutnya otomatis membuangnya dan memakai data asli.
+Satu perintah untuk semuanya (tunggu kuota → ekspor → impor → isi celah):
+`bash scripts/import-when-ready.sh`.
 
 ---
 

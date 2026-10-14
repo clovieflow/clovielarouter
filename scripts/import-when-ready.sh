@@ -34,4 +34,8 @@ node scripts/import-localdb.js "$OUT" || {
   exit 1
 }
 
+# Isi celah: pembayaran yang terjadi SETELAH snapshot Firestore (hanya ada di
+# Paymenku) tidak ikut terimpor — rekonstruksi ulang menambahkannya kembali.
+node scripts/rebuild-from-paymenku.js --apply || echo "[$(date -u +%FT%TZ)] rebuild Paymenku dilewati (gagal)" 
+
 echo "[$(date -u +%FT%TZ)] SELESAI — data Firestore sudah masuk SQLite"

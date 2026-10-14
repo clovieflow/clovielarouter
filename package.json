@@ -23,7 +23,8 @@
     "test:limits": "node scripts/test-limits.js",
     "selftest": "node scripts/store-selftest.js",
     "db:export": "node scripts/export-firestore.js",
-    "db:import": "node scripts/import-localdb.js"
+    "db:import": "node scripts/import-localdb.js",
+    "db:rebuild": "node scripts/rebuild-from-paymenku.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.11.0",
