@@ -278,6 +278,9 @@ npm run db:import -- firestore-export.json --dry   # pratinjau: lihat yang ditim
 npm run db:import -- firestore-export.json         # tulis sungguhan
 ```
 
+Di VPS jalankan importer dengan `sudo` — file `data/cloviela.db` milik root
+(service berjalan sebagai root), tanpa itu akan gagal "unable to open database".
+
 Konsekuensi tidak impor: **API key lama tidak kembali** (yang tersimpan di
 Firestore hanya hash-nya). User tinggal buka Dashboard → API Keys →
 **Terbitkan key** (butuh langganan aktif) dan langsung dapat key baru.
