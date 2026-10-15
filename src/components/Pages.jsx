@@ -405,6 +405,9 @@ export function CheckoutPage({ user, config, onLogin, refresh, busy, error: auth
                 <div>
                   <strong style={{ fontSize: 15 }}>QRIS</strong>
                   <div className="tiny text-dim">GoPay · OVO · DANA · ShopeePay · m-banking</div>
+                  <div className="tiny" style={{ color: 'var(--success, #3cf0a0)' }}>
+                    🌏 Dari luar negeri? Bisa pakai Jup Wallet (Jupiter) atau Bitget Wallet — bayar USDT/USDC.
+                  </div>
                 </div>
               </div>
               {loading === 'qris'
@@ -677,6 +680,14 @@ function PaymentPending({ payment, refresh }) {
               </div>
               <p className="small center-text text-muted mt-12">
                 Scan dari GoPay, OVO, DANA, atau m-banking.
+              </p>
+              <p className="tiny center-text mt-8" style={{ color: 'var(--success, #3cf0a0)' }}>
+                🌏 Di luar Indonesia? QR yang sama bisa discan pakai <strong>Jup Wallet</strong> (Jupiter) atau{' '}
+                <strong>Bitget Wallet</strong> — bayar pakai USDT/USDC.
+              </p>
+              <p className="tiny center-text text-dim">
+                Outside Indonesia? Scan this same QR with <strong>Jup Wallet</strong> (Jupiter) or{' '}
+                <strong>Bitget Wallet</strong> — pays in USDT/USDC.
               </p>
             </>
           )}
