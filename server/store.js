@@ -693,6 +693,81 @@ export async function adminPayments(limit = 100) {
   return rows;
 }
 
+/**
+ * Aktivitas request per user dalam jendela waktu terakhir — dipakai Overview
+ * panel admin untuk melihat POLA, bukan cuma total: siapa yang menembak
+ * berpola agent/tool (puncak 20+/menit) vs pemakaian interaktif.
+ *
+ * Catatan: hanya request yang DITERIMA (masuk usage_logs); yang ditolak
+ * limiter (429) tidak tercatat di sini — lihat counter limiter di /api/health.
+ */
+export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
+  const since = new Date(Date.now() - minutes * 60_000).toISOString();
+  const snap = await db.collection(C.usage).where('created_at', '>', since).get();
+  const rows = snap.docs.map((d) => d.data());
+
+  const byUser = new Map();
+  const perMinute = {};
+  for (const r of rows) {
+    const t = iso(r.created_at);
+    if (!t) continue;
+    const minute = t.slice(0, 16);
+    let u = byUser.get(r.user_id);
+    if (!u) {
+      u = { id: r.user_id, requests: 0, errors: 0, minutes: {}, models: {}, last: t };
+      byUser.set(r.user_id, u);
+    }
+    u.requests++;
+    if ((r.status_code || 0) >= 400) u.errors++;
+    u.minutes[minute] = (u.minutes[minute] || 0) + 1;
+    if (r.model) u.models[r.model] = (u.models[r.model] || 0) + 1;
+    if (t > u.last) u.last = t;
+    perMinute[minute] = (perMinute[minute] || 0) + 1;
+  }
+
+  const users = await Promise.all(
+    [...byUser.values()].map(async (u) => {
+      const counts = Object.values(u.minutes);
+      const peak = Math.max(0, ...counts);
+      const activeMinutes = counts.length;
+      const [user, topModel] = [
+        await getUser(u.id),
+        (Object.entries(u.models).sort((a, b) => b[1] - a[1])[0] || [])[0] || null,
+      ];
+      return {
+        id: u.id,
+        email: user?.email || null,
+        name: user?.name || null,
+        requests: u.requests,
+        errors: u.errors,
+        peak_rpm: peak,
+        active_minutes: activeMinutes,
+        avg_per_active_minute: Math.round((u.requests / Math.max(1, activeMinutes)) * 10) / 10,
+        last_at: u.last,
+        top_model: topModel,
+        // pola: puncak ≥20/menit bertahan → khas agent/tool; ≤5 → chat interaktif
+        pattern: peak >= 20 ? 'agent' : peak >= 8 ? 'sedang' : 'interaktif',
+      };
+    })
+  );
+  users.sort((a, b) => b.requests - a.requests);
+
+  const minuteRows = Object.entries(perMinute)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([minute, count]) => ({ minute, count }));
+
+  return {
+    window_minutes: minutes,
+    since,
+    total: rows.length,
+    peak_rpm_total: Math.max(0, ...Object.values(perMinute)),
+    user_count: users.length,
+    users: users.slice(0, topUsers),
+    other_users: Math.max(0, users.length - topUsers),
+    per_minute: minuteRows,
+  };
+}
+
 /* ────────────────────────────── settings ────────────────────────────── */
 
 /** Baca settings bernama (mis. 'crypto'). */

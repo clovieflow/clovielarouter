@@ -99,7 +99,9 @@ function AdminOverview() {
              sub={s.error_rate > 5 ? 'perlu dicek' : 'sehat'} />
       </div>
 
-      <div className="card">
+      <AdminTraffic />
+
+      <div className="card mt-16">
         <strong>Status provider</strong>
         <div className="stack gap-8 mt-16">
           {s.providers.map((p) => (
@@ -124,6 +126,99 @@ function Kpi({ label, value, tone, sub }) {
       <div className={`mono mt-4 ${tone === 'green' ? 'text-green' : tone === 'amber' ? 'text-amber' : tone === 'red' ? 'text-red' : ''}`}
            style={{ fontSize: 20 }}>{value}</div>
       {sub && <div className="tiny text-dim mt-4">{sub}</div>}
+    </div>
+  );
+}
+
+/* Aktivitas request per user — melihat POLA (agent/tool vs chat interaktif) */
+function AdminTraffic() {
+  const [win, setWin] = useState(60);
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api.admin.traffic(win)
+        .then((r) => { if (alive) { setD(r); setErr(''); } })
+        .catch((e) => { if (alive) setErr(e.message || 'gagal memuat'); });
+    load();
+    const t = setInterval(load, 30_000); // pantau pola tanpa refresh manual
+    return () => { alive = false; clearInterval(t); };
+  }, [win]);
+
+  const label = (m) => (m >= 60 ? `${m / 60} jam` : `${m} menit`);
+  const maxPeak = Math.max(1, ...((d && d.users) || []).map((u) => u.peak_rpm));
+  const maxMin = Math.max(1, ...((d && d.per_minute) || []).map((m) => m.count));
+
+  return (
+    <div className="card mt-16">
+      <div className="row between wrap gap-12">
+        <div>
+          <strong>Aktivitas request</strong>
+          <div className="tiny text-dim mt-4">
+            Pola per user — request yang <i>diterima</i> saja. Auto-refresh 30 detik.
+          </div>
+        </div>
+        <div className="row gap-8">
+          {[30, 60, 240].map((m) => (
+            <button key={m} className={`btn btn-sm ${win === m ? 'btn-primary' : ''}`} onClick={() => setWin(m)}>
+              {label(m)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {err && <div className="alert alert-red mt-12">{err}</div>}
+      {!d && !err && <div className="skeleton" style={{ height: 90, marginTop: 16 }} />}
+
+      {d && (
+        <>
+          <div className="row between wrap gap-12 mt-16 small">
+            <span className="text-muted">
+              <b className="mono">{d.total}</b> request · <b className="mono">{d.user_count}</b> user ·
+              puncak <b className="mono">{d.peak_rpm_total}</b>/menit
+            </span>
+            <span className="tiny text-dim">
+              ditolak limiter: rpm <b className="mono">{d.limiter?.blocked_rpm ?? 0}</b> · paralel{' '}
+              <b className="mono">{d.limiter?.blocked_concurrent ?? 0}</b> · beban {d.load?.active ?? 0}/{d.load?.capacity ?? 0}
+            </span>
+          </div>
+
+          {d.per_minute.length > 1 && (
+            <div className="spark mt-12" title="request per menit">
+              {d.per_minute.map((m) => (
+                <span key={m.minute} title={`${m.minute}Z · ${m.count} request`}
+                      style={{ height: `${Math.max(8, Math.round((m.count / maxMin) * 100))}%` }} />
+              ))}
+            </div>
+          )}
+
+          {d.users.length === 0 ? (
+            <p className="small text-dim mt-16">Tidak ada request dalam {label(win)} terakhir.</p>
+          ) : (
+            <div className="stack gap-8 mt-16">
+              {d.users.map((u) => (
+                <div key={u.id} className="small">
+                  <div className="row between wrap gap-8">
+                    <span className="grow text-ellipsis">
+                      {u.email || u.id}
+                      {u.pattern === 'agent' && <span className="pill pill-amber" style={{ marginLeft: 8 }}>agent/tool</span>}
+                      {u.pattern === 'interaktif' && <span className="pill text-dim" style={{ marginLeft: 8 }}>interaktif</span>}
+                    </span>
+                    <span className="mono tiny text-muted">
+                      {u.requests} req · puncak {u.peak_rpm}/mnt · rata {u.avg_per_active_minute}/mnt
+                      {u.top_model ? ` · ${u.top_model}` : ''} · {relative(u.last_at)}
+                    </span>
+                  </div>
+                  <div className="traffic-bar mt-4"><span style={{ width: `${Math.round((u.peak_rpm / maxPeak) * 100)}%` }} /></div>
+                </div>
+              ))}
+              {d.other_users > 0 && <span className="tiny text-dim">+{d.other_users} user lain</span>}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -633,3 +633,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .stat .v { font-size: 17px; }
   .drawer { width: min(280px, 86vw); }
 }
+
+/* Panel admin — aktivitas request: sparkline per menit + bar puncak per user */
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 34px; }
+.spark span { flex: 1; min-width: 2px; background: #3cf0a099; border-radius: 2px 2px 0 0; }
+.spark span:hover { background: var(--green, #3cf0a0); }
+.text-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.traffic-bar { height: 4px; background: #ffffff12; border-radius: 2px; overflow: hidden; }
+.traffic-bar span { display: block; height: 100%; background: var(--green, #3cf0a0); opacity: .75; }

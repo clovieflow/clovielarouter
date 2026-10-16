@@ -43,6 +43,7 @@ CREATE INDEX IF NOT EXISTS docs_status   ON docs(coll, json_extract(data, '$.sta
 CREATE INDEX IF NOT EXISTS docs_keyhash  ON docs(coll, json_extract(data, '$.key_hash'));
 CREATE INDEX IF NOT EXISTS docs_provider ON docs(coll, json_extract(data, '$.provider_id'));
 CREATE INDEX IF NOT EXISTS docs_enabled  ON docs(coll, json_extract(data, '$.enabled'));
+CREATE INDEX IF NOT EXISTS docs_created  ON docs(coll, json_extract(data, '$.created_at'));
 `;
 
 /** Buka (dan siapkan) file SQLite. `:memory:` juga boleh (untuk test). */
@@ -215,11 +216,14 @@ export function createLocalDb({ path, sqlite: given } = {}) {
         where.push('coll = ?');
         params.push(this.coll);
       }
-      // Prefilter di SQL untuk '==' (kena index), keputusan akhir di JS
-      // supaya semantiknya persis (tipe & operator apa pun).
+      // Prefilter di SQL untuk operator yang bisa diterjemahkan langsung
+      // (kena index ekspresi), keputusan akhir tetap di JS supaya semantiknya
+      // persis. Operator lain (in, array-contains, …) disaring di JS saja.
+      const OPS = { '==': '=', '>': '>', '>=': '>=', '<': '<', '<=': '<=' };
       for (const [field, op, value] of this.conds) {
-        if (op === '==') {
-          where.push('json_extract(data, ?) = ?');
+        const sqlOp = OPS[op];
+        if (sqlOp) {
+          where.push(`json_extract(data, ?) ${sqlOp} ?`);
           params.push(`$.${field}`, bind(normalize(value)));
         }
       }

@@ -55,6 +55,7 @@ export const api = {
 
   admin: {
     stats: () => request('/api/admin/stats'),
+    traffic: (minutes = 60) => request(`/api/admin/traffic?minutes=${minutes}`),
     users: (q = '') => request(`/api/admin/users?q=${encodeURIComponent(q)}`),
     payments: () => request('/api/admin/payments'),
     extend: (id, amount, unit = 'hari') => request(`/api/admin/users/${id}/extend`, { method: 'POST', body: { amount, unit } }),
