@@ -1376,24 +1376,46 @@ app.all('/v1/*', asyncRoute(async (req, res) => {
 
   const reader = upstreamRes.body.getReader();
   res.flushHeaders?.();
+  // Intip salinan stream untuk mencari `usage` (token). Byte yang dikirim ke
+  // client TIDAK diubah — provider yang tidak mengirim usage di stream tetap
+  // jalan seperti biasa, token-nya saja yang tetap kosong di log.
+  let usage = null;
+  let tail = '';
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       res.write(Buffer.from(value));
+      tail += Buffer.from(value).toString('utf8');
+      const lines = tail.split('\n');
+      tail = lines.pop() || '';
+      if (tail.length > 1e6) tail = ''; // jaga-jaga kalau ada chunk tanpa newline
+      for (const line of lines) {
+        if (!line.includes('"usage"')) continue;
+        const payload = line.replace(/^data:\s*/, '').trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const j = JSON.parse(payload);
+          if (j?.usage) usage = j.usage;
+        } catch { /* baris bukan JSON utuh — abaikan */ }
+      }
     }
   } catch {
     /* client memutus koneksi */
   } finally {
     res.end();
-    logUsage({ key, model, requestId, status: upstreamRes.status, ms: Date.now() - started });
+    logUsage({ key, model, requestId, status: upstreamRes.status, ms: Date.now() - started, usage });
   }
 }));
 
-function logUsage({ key, model, requestId, status, ms, text }) {
+function logUsage({ key, model, requestId, status, ms, text, usage }) {
   let tokensIn = null;
   let tokensOut = null;
-  if (text) {
+  if (usage) {
+    // dari chunk SSE (streaming) — field OpenAI-compatible
+    tokensIn = usage.prompt_tokens ?? null;
+    tokensOut = usage.completion_tokens ?? null;
+  } else if (text) {
     try {
       const j = JSON.parse(text);
       tokensIn = j?.usage?.prompt_tokens ?? null;

@@ -722,11 +722,14 @@ export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
     const minute = t.slice(0, 16);
     let u = byUser.get(r.user_id);
     if (!u) {
-      u = { id: r.user_id, requests: 0, errors: 0, minutes: {}, models: {}, last: t };
+      u = { id: r.user_id, requests: 0, errors: 0, minutes: {}, models: {}, last: t, tokens_in: 0, tokens_out: 0, no_tokens: 0 };
       byUser.set(r.user_id, u);
     }
     u.requests++;
     if ((r.status_code || 0) >= 400) u.errors++;
+    u.tokens_in += r.tokens_in || 0;
+    u.tokens_out += r.tokens_out || 0;
+    if (r.tokens_out == null) u.no_tokens++;
     u.minutes[minute] = (u.minutes[minute] || 0) + 1;
     if (r.model) u.models[r.model] = (u.models[r.model] || 0) + 1;
     if (t > u.last) u.last = t;
@@ -748,6 +751,12 @@ export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
         name: user?.name || null,
         requests: u.requests,
         errors: u.errors,
+        tokens_in: u.tokens_in || null,
+        tokens_out: u.tokens_out || null,
+        // berapa request di jendela ini yang tokennya tidak tercatat (provider
+        // tak mengirim usage di stream) — biar angka token tidak dibaca mentah
+        token_missing: u.no_tokens,
+        share: null, // diisi setelah total diketahui
         peak_rpm: peak,
         active_minutes: activeMinutes,
         avg_per_active_minute: Math.round((u.requests / Math.max(1, activeMinutes)) * 10) / 10,
@@ -759,6 +768,33 @@ export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
     })
   );
   users.sort((a, b) => b.requests - a.requests);
+  for (const u of users) u.share = rows.length ? Math.round((u.requests / rows.length) * 1000) / 10 : 0;
+
+  // Total sepanjang waktu per user (bukan cuma jendela terpilih) — dihitung di
+  // SQL langsung supaya tidak perlu mem-parse puluhan ribu baris di JS.
+  let allTime = null;
+  let totalsAll = null;
+  if (db.sqlite) {
+    const agg = db.sqlite
+      .prepare(
+        `SELECT json_extract(data, '$.user_id') AS uid,
+                count(*) AS requests,
+                sum(coalesce(json_extract(data, '$.tokens_in'), 0))  AS tokens_in,
+                sum(coalesce(json_extract(data, '$.tokens_out'), 0)) AS tokens_out,
+                sum(CASE WHEN json_extract(data, '$.tokens_out') IS NULL THEN 1 ELSE 0 END) AS token_missing
+           FROM docs WHERE coll = ? GROUP BY uid`
+      )
+      .all(C.usage);
+    allTime = new Map(agg.map((r) => [r.uid, r]));
+    totalsAll = agg.reduce(
+      (a, r) => ({
+        requests: a.requests + r.requests,
+        tokens_in: a.tokens_in + (r.tokens_in || 0),
+        tokens_out: a.tokens_out + (r.tokens_out || 0),
+      }),
+      { requests: 0, tokens_in: 0, tokens_out: 0 }
+    );
+  }
 
   // gabungkan hitungan per menit ke bucket
   const bucketMs = bucketMinutes * 60_000;
@@ -772,6 +808,10 @@ export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([t, count]) => ({ t, count }));
 
+  const tokensIn = rows.reduce((a, r) => a + (r.tokens_in || 0), 0);
+  const tokensOut = rows.reduce((a, r) => a + (r.tokens_out || 0), 0);
+  const tokenMissing = rows.filter((r) => r.tokens_out == null).length;
+
   return {
     window_minutes: minutes,
     since,
@@ -779,9 +819,13 @@ export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
     total: rows.length,
     peak_rpm_total: Math.max(0, ...Object.values(perMinute)),
     user_count: users.length,
-    users: users.slice(0, topUsers),
+    users: users
+      .slice(0, topUsers)
+      .map((u) => ({ ...u, all_time: allTime?.get(u.id) || null })),
     other_users: Math.max(0, users.length - topUsers),
     series,
+    tokens: { in: tokensIn || null, out: tokensOut || null, missing: tokenMissing },
+    all_time: totalsAll,
   };
 }
 

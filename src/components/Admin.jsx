@@ -130,6 +130,15 @@ function Kpi({ label, value, tone, sub }) {
   );
 }
 
+/** 1234567 → "1,2 jt" (biar kolom tidak melebar) */
+function compact(n) {
+  if (n == null) return '—';
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1).replace('.', ',')} M`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace('.', ',')} jt`;
+  if (n >= 1e4) return `${Math.round(n / 1e3)} rb`;
+  return n.toLocaleString('id-ID');
+}
+
 /* Aktivitas request per user — melihat POLA (agent/tool vs chat interaktif) */
 function AdminTraffic() {
   const [win, setWin] = useState(60);
@@ -182,6 +191,22 @@ function AdminTraffic() {
             <span className="text-muted">
               <b className="mono">{d.total}</b> request · <b className="mono">{d.user_count}</b> user ·
               puncak <b className="mono">{d.peak_rpm_total}</b>/menit
+              {d.tokens?.out ? (
+                <>
+                  {' · '}
+                  <b className="mono">{compact((d.tokens.in || 0) + (d.tokens.out || 0))}</b> token
+                  <span className="tiny text-dim"> ({compact(d.tokens.in)} in / {compact(d.tokens.out)} out)</span>
+                </>
+              ) : null}
+              {d.all_time ? (
+                <>
+                  {' · '}
+                  <span className="tiny text-dim">
+                    sepanjang waktu <b className="mono">{compact(d.all_time.requests)}</b> req ·{' '}
+                    <b className="mono">{compact(d.all_time.tokens_in + d.all_time.tokens_out)}</b> token
+                  </span>
+                </>
+              ) : null}
             </span>
             <span className="tiny text-dim">
               ditolak limiter: rpm <b className="mono">{d.limiter?.blocked_rpm ?? 0}</b> · paralel{' '}
@@ -210,10 +235,23 @@ function AdminTraffic() {
                       {u.pattern === 'agent' && <span className="pill pill-amber" style={{ marginLeft: 8 }}>agent/tool</span>}
                       {u.pattern === 'interaktif' && <span className="pill text-dim" style={{ marginLeft: 8 }}>interaktif</span>}
                     </span>
+                    <span className="mono tiny">
+                      <b>{u.requests.toLocaleString('id-ID')}</b> req
+                      {u.share != null && <span className="text-dim"> ({u.share}%)</span>}
+                      {' · '}
+                      <b>{u.tokens_out || u.tokens_in ? compact((u.tokens_in || 0) + (u.tokens_out || 0)) : '—'}</b> token
+                    </span>
+                  </div>
+                  <div className="row between wrap gap-8 mt-4">
                     <span className="mono tiny text-muted">
-                      {u.requests} req · puncak {u.peak_rpm}/mnt · rata {u.avg_per_active_minute}/mnt
+                      puncak {u.peak_rpm}/mnt · rata {u.avg_per_active_minute}/mnt
                       {u.top_model ? ` · ${u.top_model}` : ''} · {relative(u.last_at)}
                     </span>
+                    {u.all_time && (
+                      <span className="tiny text-dim">
+                        total: {compact(u.all_time.requests)} req · {compact(u.all_time.tokens_in + u.all_time.tokens_out)} token
+                      </span>
+                    )}
                   </div>
                   <div className="traffic-bar mt-4"><span style={{ width: `${Math.round((u.peak_rpm / maxPeak) * 100)}%` }} /></div>
                 </div>
