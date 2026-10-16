@@ -877,10 +877,10 @@ app.get('/api/admin/users', ...adminChain, asyncRoute(async (req, res) => {
 
 /**
  * Aktivitas request per user — untuk melihat POLA pemakaian (agent/tool vs
- * chat), bukan cuma total. `minutes` dibatasi 5 menit … 24 jam.
+ * chat), bukan cuma total. `minutes` dibatasi 5 menit … 48 jam.
  */
 app.get('/api/admin/traffic', ...adminChain, asyncRoute(async (req, res) => {
-  const minutes = Math.min(24 * 60, Math.max(5, Number(req.query.minutes) || 60));
+  const minutes = Math.min(48 * 60, Math.max(5, Number(req.query.minutes) || 60));
   const traffic = await store.adminTraffic({ minutes });
   res.json({ ...traffic, limiter: limitsInfo(), load: currentLoad() });
 }));

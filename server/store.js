@@ -694,9 +694,13 @@ export async function adminPayments(limit = 100) {
 }
 
 /**
- * Aktivitas request per user dalam jendela waktu terakhir — dipakai Overview
- * panel admin untuk melihat POLA, bukan cuma total: siapa yang menembak
- * berpola agent/tool (puncak 20+/menit) vs pemakaian interaktif.
+ * Aktivitas request per user dalam jendela waktu terakhir (5 menit … 48 jam) —
+ * dipakai Overview panel admin untuk melihat POLA, bukan cuma total: siapa
+ * yang menembak berpola agent/tool (puncak 20+/menit) vs pemakaian interaktif.
+ *
+ * `bucket_minutes` = lebar satu batang sparkline (1 menit untuk jendela pendek,
+ * 5/15 menit untuk jendela panjang). Puncak per menit dihitung dari data
+ * per menit, bukan dari bucket.
  *
  * Catatan: hanya request yang DITERIMA (masuk usage_logs); yang ditolak
  * limiter (429) tidak tercatat di sini — lihat counter limiter di /api/health.
@@ -705,6 +709,10 @@ export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
   const since = new Date(Date.now() - minutes * 60_000).toISOString();
   const snap = await db.collection(C.usage).where('created_at', '>', since).get();
   const rows = snap.docs.map((d) => d.data());
+
+  // Bucket sparkline adaptif: makin panjang jendela, makin lebar bucket-nya
+  // (48 jam kalau per menit = 2.880 batang — tidak terbaca & boros render).
+  const bucketMinutes = minutes <= 240 ? 1 : minutes <= 1440 ? 5 : 15;
 
   const byUser = new Map();
   const perMinute = {};
@@ -752,19 +760,28 @@ export async function adminTraffic({ minutes = 60, topUsers = 12 } = {}) {
   );
   users.sort((a, b) => b.requests - a.requests);
 
-  const minuteRows = Object.entries(perMinute)
+  // gabungkan hitungan per menit ke bucket
+  const bucketMs = bucketMinutes * 60_000;
+  const buckets = new Map();
+  for (const [minute, count] of Object.entries(perMinute)) {
+    const start = new Date(Math.floor(new Date(`${minute}:00Z`).getTime() / bucketMs) * bucketMs);
+    const key = start.toISOString().slice(0, 16);
+    buckets.set(key, (buckets.get(key) || 0) + count);
+  }
+  const series = [...buckets.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([minute, count]) => ({ minute, count }));
+    .map(([t, count]) => ({ t, count }));
 
   return {
     window_minutes: minutes,
     since,
+    bucket_minutes: bucketMinutes,
     total: rows.length,
     peak_rpm_total: Math.max(0, ...Object.values(perMinute)),
     user_count: users.length,
     users: users.slice(0, topUsers),
     other_users: Math.max(0, users.length - topUsers),
-    per_minute: minuteRows,
+    series,
   };
 }
 

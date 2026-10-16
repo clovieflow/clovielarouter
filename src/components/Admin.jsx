@@ -143,13 +143,16 @@ function AdminTraffic() {
         .then((r) => { if (alive) { setD(r); setErr(''); } })
         .catch((e) => { if (alive) setErr(e.message || 'gagal memuat'); });
     load();
-    const t = setInterval(load, 30_000); // pantau pola tanpa refresh manual
+    // jendela panjang = query berat → refresh lebih jarang
+    const every = win <= 240 ? 30_000 : 120_000;
+    const t = setInterval(load, every);
     return () => { alive = false; clearInterval(t); };
   }, [win]);
 
   const label = (m) => (m >= 60 ? `${m / 60} jam` : `${m} menit`);
+  const bucketLabel = (m) => (m === 1 ? 'per menit' : `per ${m} menit`);
   const maxPeak = Math.max(1, ...((d && d.users) || []).map((u) => u.peak_rpm));
-  const maxMin = Math.max(1, ...((d && d.per_minute) || []).map((m) => m.count));
+  const maxMin = Math.max(1, ...((d && d.series) || []).map((m) => m.count));
 
   return (
     <div className="card mt-16">
@@ -157,11 +160,12 @@ function AdminTraffic() {
         <div>
           <strong>Aktivitas request</strong>
           <div className="tiny text-dim mt-4">
-            Pola per user — request yang <i>diterima</i> saja. Auto-refresh 30 detik.
+            Pola per user — request yang <i>diterima</i> saja.
+            {d ? ` Auto-refresh ${win <= 240 ? 30 : 120} detik · grafik ${bucketLabel(d.bucket_minutes || 1)}.` : ''}
           </div>
         </div>
         <div className="row gap-8">
-          {[30, 60, 240].map((m) => (
+          {[30, 60, 240, 1440, 2880].map((m) => (
             <button key={m} className={`btn btn-sm ${win === m ? 'btn-primary' : ''}`} onClick={() => setWin(m)}>
               {label(m)}
             </button>
@@ -185,10 +189,10 @@ function AdminTraffic() {
             </span>
           </div>
 
-          {d.per_minute.length > 1 && (
-            <div className="spark mt-12" title="request per menit">
-              {d.per_minute.map((m) => (
-                <span key={m.minute} title={`${m.minute}Z · ${m.count} request`}
+          {d.series?.length > 1 && (
+            <div className="spark mt-12" title={`request ${bucketLabel(d.bucket_minutes || 1)}`}>
+              {d.series.map((m) => (
+                <span key={m.t} title={`${m.t.replace('T', ' ')}Z · ${m.count} request`}
                       style={{ height: `${Math.max(8, Math.round((m.count / maxMin) * 100))}%` }} />
               ))}
             </div>
